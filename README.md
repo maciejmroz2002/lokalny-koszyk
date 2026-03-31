@@ -1,2 +1,15 @@
-# lokalny-koszyk
-Lokalny Koszyk to system webowy zaprojektowany dla dystrybutora produktów regionalnych. Automatyzuje procesy magazynowe, zarządzanie relacjami z dostawcami i klientami hurtowymi, oraz wysyła alerty o niskich stanach towarowych. Projekt realizowany przez zespół 6-osobowy w modelu Agile/Scrum.
+# Lokalny Koszyk 🧺
+
+Webowy system do zarządzania hurtownią produktów regionalnych. Automatyzuje procesy magazynowe, zarządzanie dostawcami i wysyła alerty o niskich stanach towarowych.
+
+## Technologia
+
+- **Backend:** Go
+- **Frontend:** HTMX, HTML, CSS, JavaScript
+
+## Główne Funkcje
+
+- 📦 Monitorowanie stanów magazynowych w czasie rzeczywistym
+- 👥 Zarządzanie relacjami z dostawcami (CRM)
+- 📨 Automatyczne alerty o brakach towaru
+- 🛒 Obsługa zamówień
