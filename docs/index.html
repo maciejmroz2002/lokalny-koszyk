@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lokalny Koszyk - Wiki</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <button class="menu-toggle" id="menu-toggle" title="Menu"><i class="fas fa-bars"></i></button>
+    <div class="container">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <a href="#" id="home-link" class="home-link" title="Strona główna">
+                    <h1><i class="fas fa-home"></i> Lokalny Koszyk</h1>
+                    <p>Wiki & Dokumentacja</p>
+                </a>
+            </div>
+            
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Szukaj...">
+                <i class="fas fa-search search-icon"></i>
+            </div>
+            
+            <nav class="menu">
+                <ul class="menu-icons">
+                    <li><a href="#" data-page="OProjekcie" class="menu-link" title="O projekcie"><i class="fas fa-circle-question"></i></a></li>
+                    <li><a href="#" data-page="Instrukcja" class="menu-link" title="Instrukcja"><i class="fas fa-book-open"></i></a></li>
+                    <li><a href="#" data-page="Zadania" class="menu-link" title="Zadania"><i class="fas fa-tasks"></i></a></li>
+                </ul>
+            </nav>
+
+            <div class="documents-section">
+                <h3 class="documents-title"><i class="fas fa-external-link-alt"></i> Dokumenty</h3>
+                <ul class="documents-list">
+                    <li><a href="https://docs.google.com/document/d/1Rw1RVfK9JeTbshHGRQjm2tVH---1dylgz5mnFikJ3JY/edit?usp=sharing" target="_blank">Plan Projektu</a></li>
+                    <li><a href="https://docs.google.com/document/d/1X0knxr3xY48dfQGjl_-8tJaRgpn8BXWtEERnr3kX8_0/edit?usp=sharing" target="_blank">Wizja i Analiza Systemu</a></li>
+                </ul>
+            </div>
+            
+            <div class="toc-section">
+                <h3 class="toc-title"><i class="fas fa-list"></i> Spis treści</h3>
+                <nav id="table-of-contents" class="table-of-contents">
+                    <p class="toc-empty">Wybierz stronę, aby zobaczyć spis treści</p>
+                </nav>
+            </div>
+        </aside>
+        
+        <main class="content">
+            <div class="header-section">
+                <h2 id="page-title">Witaj w Wiki</h2>
+                <div class="breadcrumb" id="breadcrumb"></div>
+            </div>
+            
+            <div id="page-content" class="page-content">
+                <div class="welcome">
+                    <h2>Witaj w Wiki Lokalny Koszyk</h2>
+                    <p>Strona ta została utworzona w celu usprawnienia dostępu do dokumentacji oraz ułatwienia nawigacji zespołowi. Tutaj znajdziesz wszystkie potrzebne informacje na temat projektu, instrukcje i dokumentację w jednym, łatwo dostępnym miejscu.</p>
+                </div>
+
+                <div class="navigation-guide">
+                    <h2>Jak nawigować po Wiki?</h2>
+                    <p>Poniżej opisane są wszystkie elementy menu, które pomogą Ci w znalezieniu potrzebnych informacji:</p>
+                    
+                    <div class="nav-items">
+                        <div class="nav-item">
+                            <div class="nav-icon"><i class="fas fa-circle-question"></i></div>
+                            <div class="nav-content">
+                                <h4>O Projekcie</h4>
+                                <p>Tutaj znajdziesz opis projektu Lokalny Koszyk i informacje ogólne na jego temat.</p>
+                            </div>
+                        </div>
+
+                        <div class="nav-item">
+                            <div class="nav-icon"><i class="fas fa-book-open"></i></div>
+                            <div class="nav-content">
+                                <h4>Instrukcja</h4>
+                                <p>Kompletna instrukcja jak uruchomić program lokalnie i przygotować środowisko do pracy.</p>
+                            </div>
+                        </div>
+
+                        <div class="nav-item">
+                            <div class="nav-icon"><i class="fas fa-external-link-alt"></i></div>
+                            <div class="nav-content">
+                                <h4>Dokumenty</h4>
+                                <p>Bezpośrednie linki do różnych dokumentów Google, w tym Plan Projektu i Wizję Systemu. Dokumenty otwierają się w nowej karcie.</p>
+                            </div>
+                        </div>
+
+                        <div class="nav-item">
+                            <div class="nav-icon"><i class="fas fa-list"></i></div>
+                            <div class="nav-content">
+                                <h4>Spis Treści</h4>
+                                <p>Po wybraniu strony z menu pojawi się spis treści, dzięki któremu możesz szybko przejść do interesującego Cię fragmentu tekstu.</p>
+                            </div>
+                        </div>
+
+                        <div class="nav-item">
+                            <div class="nav-icon"><i class="fas fa-search"></i></div>
+                            <div class="nav-content">
+                                <h4>Wyszukiwanie</h4>
+                                <p>Użyj pola wyszukiwania na górze menu, aby szybko znaleźć konkretne informacje na całej stronie.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script src="js/script.js"></script>
+</body>
+</html>

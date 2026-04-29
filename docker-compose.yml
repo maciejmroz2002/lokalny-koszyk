@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTRES_DB}
+    volumes:
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+
+  backend:
+    build: ./backend
+    ports:
+      - 8080:8080
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_DATABASE: ${POSTRES_DB}
+      JWT_SECRET: ${JWT_SECRET}

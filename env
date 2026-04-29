@@ -1,0 +1,5 @@
+POSTGRES_USER="user"
+POSTGRES_PASSWORD="password"
+POSTRES_DB="mydb"
+
+JWT_SECRET="super_secret_key"
