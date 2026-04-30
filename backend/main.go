@@ -38,6 +38,21 @@ type jwtClaims struct {
 	jwt.RegisteredClaims
 }
 
+func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, hx-current-url, hx-request, hx-trigger, hx-trigger-name, hx-target, hx-swap")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next(w, r)
+	}
+}
+
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	var req loginReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -94,6 +109,6 @@ func main() {
 	}
 	defer db.Close()
 
-	http.HandleFunc("/api/login", loginHandler)
+	http.HandleFunc("/api/login", corsMiddleware(loginHandler))
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

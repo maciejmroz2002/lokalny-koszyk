@@ -20,11 +20,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Home link - reload strony
+    // Home link - navigate to landing page
     if (homeLink) {
         homeLink.addEventListener('click', function(e) {
             e.preventDefault();
-            location.reload();
+            window.location.href = '../frontend/index.html';
         });
     }
 
@@ -101,9 +101,88 @@ document.addEventListener('DOMContentLoaded', function() {
         if (page === 'OProjekcie') {
             pageContent.innerHTML = '<p><em>Tu będzie opis czym jest Lokalny Koszyk</em></p>';
         } else if (page === 'Instrukcja') {
-            pageContent.innerHTML = '<p><em>Tu będzie instrukcja jak uruchomic program lokalnie</em></p>';
+            pageContent.innerHTML = `
+                <div class="instruction-content">
+                    <h2>Instrukcja Instalacji i Uruchomienia</h2>
+                    
+                    <h3>Wymagania</h3>
+                    <ul>
+                        <li>Docker i Docker Compose</li>
+                        <li>Go 1.19+ (dla lokalnego development)</li>
+                        <li>Git</li>
+                    </ul>
+                    
+                    <h3>Uruchomienie z Docker Compose (Rekomendowane)</h3>
+                    <ol>
+                        <li>Sklonuj repozytorium:
+                            <pre><code>git clone &lt;repo-url&gt;
+cd lokalny-koszyk</code></pre>
+                        </li>
+                        <li>Uruchom aplikację:
+                            <pre><code>docker-compose up --build</code></pre>
+                        </li>
+                        <li>Otwórz w przeglądarce:
+                            <pre><code>http://localhost:8080</code></pre>
+                        </li>
+                    </ol>
+                    
+                    <h3>Dane do Logowania</h3>
+                    <ul>
+                        <li><strong>Nazwa użytkownika:</strong> admin</li>
+                        <li><strong>Hasło:</strong> password</li>
+                    </ul>
+                    
+                    <h3>Lokalne Uruchomienie bez Dockera</h3>
+                    
+                    <h4>Backend (Go):</h4>
+                    <pre><code>cd backend
+go mod download
+go run main.go</code></pre>
+                    
+                    <h4>Frontend:</h4>
+                    <p>Otwórz plik <code>frontend/index.html</code> w przeglądarce lub uruchom lokalny serwer:</p>
+                    <pre><code>cd frontend
+python -m http.server 8000</code></pre>
+                    
+                    <h3>Struktura Projektu</h3>
+                    <ul>
+                        <li><code>backend/</code> - Kod aplikacji Go</li>
+                        <li><code>frontend/</code> - HTML, CSS, JavaScript</li>
+                        <li><code>docs/</code> - Dokumentacja i Wiki</li>
+                        <li><code>initdb/</code> - Skrypty bazy danych</li>
+                        <li><code>docker-compose.yml</code> - Konfiguracja Docker</li>
+                    </ul>
+                    
+                    <h3>Rozwiązywanie Problemów</h3>
+                    <ul>
+                        <li><strong>Port zajęty:</strong> Zmień port w docker-compose.yml</li>
+                        <li><strong>Błędy bazy danych:</strong> Sprawdź init.sql w folderze initdb/</li>
+                        <li><strong>Błędy frontendu:</strong> Czyść cache przeglądarki (Ctrl+Shift+Delete)</li>
+                    </ul>
+                </div>
+            `;
         } else if (page === 'Zadania') {
             pageContent.innerHTML = `
+                <div class="task-post">
+                    <div class="post-header">
+                        <h3 class="post-date">20 kwietnia 2026</h3>
+                    </div>
+                    <div class="post-content">
+                        <h4>Dokumentacja</h4>
+                        <ul>
+                            <li>Poprawienie priorytetów żeby były spójne między dwoma plikami</li>
+                            <li>Pełna wersja architektury systemu</li>
+                            <li>Korekta w iteracjach</li>
+                        </ul>
+
+                        <h4>Programowanie</h4>
+                        <ul>
+                            <li>Przygotowanie struktury</li>
+                            <li>Działający panel logowania</li>
+                        </ul>
+                    </div>
+                </div>
+                
                 <div class="task-post">
                     <div class="post-header">
                         <h3 class="post-date">30 marca 2026</h3>

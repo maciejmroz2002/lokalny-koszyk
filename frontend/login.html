@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lokalny Koszyk - Logowanie</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="login-page">
+  <nav class="navbar">
+    <div class="navbar-container">
+      <a href="index.html" class="navbar-logo">Lokalny Koszyk</a>
+      <div class="navbar-links">
+        <a href="../docs/index.html" class="navbar-link">Wiki</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="login-container">
+    <h1>Lokalny Koszyk</h1>
+    
+    <form id="loginForm">
+      
+      <div class="form-group">
+        <label for="username">Nazwa użytkownika</label>
+        <input 
+          type="text" 
+          id="username" 
+          name="username" 
+          required
+          placeholder="admin">
+      </div>
+
+      <div class="form-group">
+        <label for="password">Hasło</label>
+        <input 
+          type="password" 
+          id="password" 
+          name="password" 
+          required
+          placeholder="password">
+      </div>
+
+      <button type="submit" class="btn" id="loginBtn">Zaloguj się</button>
+
+      <a href="index.html" class="btn btn-secondary">Powrót</a>
+
+      <div class="error" id="errorMessage"></div>
+    </form>
+  </div>
+
+  <script src="js/script.js"></script>
+</body>
+</html>
