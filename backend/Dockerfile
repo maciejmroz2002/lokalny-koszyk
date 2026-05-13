@@ -1,5 +1,5 @@
 FROM golang:alpine
 WORKDIR /app
-COPY go.mod go.sum main.go .
+COPY main.go go.mod go.sum ./
 RUN go build
 CMD ["/app/backend"]
