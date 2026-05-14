@@ -4,23 +4,124 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Lokalny Koszyk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,1..1000&display=swap" rel="stylesheet">
+  <link rel="icon" href="/images/favicon.png" type="image/png">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <div class="dashboard">
     <header class="dashboard-header">
-      <h1>Lokalny Koszyk</h1>
-      <button id="logoutBtn" class="logout-btn" title="Wyloguj się">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-          <polyline points="16 17 21 12 16 7"></polyline>
-          <line x1="21" y1="12" x2="9" y2="12"></line>
-        </svg>
-      </button>
+      <h1>Lokalny Koszyk - Dashboard</h1>
+      <div class="user-info">
+        <span id="username"></span>
+        <span id="userRole" class="role-badge"></span>
+        <button id="logoutBtn" class="logout-btn" title="Wyloguj się">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+        </button>
+      </div>
     </header>
-    <main class="dashboard-content">
-      <!-- Content goes here -->
-    </main>
+    
+    <div class="dashboard-wrapper">
+      <aside class="dashboard-sidebar">
+        <nav class="dashboard-menu">
+          <button class="menu-item active" data-view="catalogue">
+            Katalog
+          </button>
+          <button class="menu-item" id="inventoryMenuBtn" data-view="inventory" style="display: none;">
+            Zarządzanie Zapasami
+          </button>
+        </nav>
+      </aside>
+
+      <main class="dashboard-content">
+        <!-- CATALOGUE VIEW -->
+        <div class="view-section active" id="catalogue-view">
+          <h2>Katalog Produktów</h2>
+          <div class="products-grid" id="catalogueGrid">
+            <div class="loading">Wczytywanie produktów...</div>
+          </div>
+        </div>
+
+        <!-- INVENTORY MANAGEMENT VIEW -->
+        <div class="view-section" id="inventory-view">
+          <div class="inventory-header">
+            <h2>Zarządzanie Zapasami</h2>
+            <button id="addProductBtn" class="btn btn-icon-only" title="Dodaj produkt">+</button>
+          </div>
+          
+          <table class="inventory-table" id="inventoryTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nazwa</th>
+                <th>Lokalizacja</th>
+                <th>Cena</th>
+                <th>Ilość</th>
+                <th>Akcje</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryBody">
+              <tr><td colspan="6" class="loading">Wczytywanie...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+
+    <!-- MODAL - Add/Edit Product -->
+    <div id="productModal" class="modal" style="display: none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="modalTitle">Dodaj Produkt</h3>
+          <button class="modal-close" id="modalCloseBtn">&times;</button>
+        </div>
+        <form id="productForm">
+          <div class="form-group">
+            <label for="productName">Nazwa Produktu</label>
+            <input type="text" id="productName" required>
+          </div>
+          <div class="form-group">
+            <label for="productLocation">Lokalizacja</label>
+            <input type="text" id="productLocation" required>
+          </div>
+          <div class="form-group">
+            <label for="productPrice">Cena (zł)</label>
+            <input type="number" id="productPrice" step="0.01" required>
+          </div>
+          <div class="form-group">
+            <label for="productCount">Ilość</label>
+            <input type="number" id="productCount" required>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="submitBtn">Zapisz</button>
+            <button type="button" class="btn btn-secondary" id="cancelBtn">Anuluj</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL - Product Details in Catalogue -->
+    <div id="catalogueDetailModal" class="modal" style="display: none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Szczegóły Produktu</h3>
+          <button class="modal-close" onclick="document.getElementById('catalogueDetailModal').style.display='none'">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="product-details">
+            <p><strong>Nazwa:</strong> <span id="catalogueDetailName"></span></p>
+            <p><strong>Lokalizacja:</strong> <span id="catalogueDetailLocation"></span></p>
+            <p><strong>Cena:</strong> <span id="catalogueDetailPrice"></span> zł</p>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="js/dashboard.js"></script>

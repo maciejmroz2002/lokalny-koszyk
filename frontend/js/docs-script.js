@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (homeLink) {
         homeLink.addEventListener('click', function(e) {
             e.preventDefault();
-            window.location.href = '../frontend/index.html';
+            window.location.href = '../index.html';
         });
     }
 
@@ -68,10 +68,12 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Event listener dla wyszukiwania
-    searchInput.addEventListener('input', debounce(function(e) {
-        const searchTerm = e.target.value.toLowerCase();
-        filterAndSearch(searchTerm);
-    }, 300));
+    if (searchInput) {
+        searchInput.addEventListener('input', debounce(function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            filterAndSearch(searchTerm);
+        }, 300));
+    }
 
     function loadAllPages() {
         const pages = ['PlanProjektu', 'WizjaSystemu'];
@@ -105,14 +107,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="instruction-content">
                     <h2>Instrukcja Instalacji i Uruchomienia</h2>
                     
-                    <h3>Wymagania</h3>
+                    <h3>Szybki Start</h3>
+                    <p>Aby szybko uruchomić aplikację, wystarczy:</p>
+                    <pre><code>git clone &lt;repo-url&gt;
+cd lokalny-koszyk
+docker-compose up --build</code></pre>
+                    <p>Aplikacja będzie dostępna na <strong>http://localhost:8080</strong></p>
+                    
+                    <h3>Wymagania Systemowe</h3>
                     <ul>
-                        <li>Docker i Docker Compose</li>
-                        <li>Go 1.19+ (dla lokalnego development)</li>
-                        <li>Git</li>
+                        <li><strong>Docker i Docker Compose</strong> - dla uruchamiania kontenerów aplikacji (zalecane)</li>
+                        <li><strong>Go 1.19+</strong> - dla lokalnego development bez Dockera</li>
+                        <li><strong>PostgreSQL</strong> - baza danych (w Dockerze lub lokalnie)</li>
+                        <li><strong>Git</strong> - do klonowania repozytorium</li>
+                        <li><strong>Przeglądarka internetowa</strong> - Chrome, Firefox, Safari lub Edge</li>
                     </ul>
                     
-                    <h3>Uruchomienie z Docker Compose (Rekomendowane)</h3>
+                    <h3>Instalacja i Uruchomienie</h3>
+                    
+                    <h4>Metoda 1: Docker Compose (Rekomendowane)</h4>
                     <ol>
                         <li>Sklonuj repozytorium:
                             <pre><code>git clone &lt;repo-url&gt;
@@ -121,48 +134,114 @@ cd lokalny-koszyk</code></pre>
                         <li>Uruchom aplikację:
                             <pre><code>docker-compose up --build</code></pre>
                         </li>
+                        <li>Czekaj na komunikat "ready for connections" z bazy danych</li>
                         <li>Otwórz w przeglądarce:
                             <pre><code>http://localhost:8080</code></pre>
                         </li>
                     </ol>
                     
+                    <h4>Metoda 2: Lokalne Uruchomienie bez Dockera</h4>
+                    
+                    <strong>Backend (Go):</strong>
+                    <ol>
+                        <li>Zainstaluj PostgreSQL lokalnie</li>
+                        <li>Przejdź do folderu backend:
+                            <pre><code>cd backend</code></pre>
+                        </li>
+                        <li>Pobierz zależności:
+                            <pre><code>go mod download</code></pre>
+                        </li>
+                        <li>Uruchom aplikację:
+                            <pre><code>go run main.go</code></pre>
+                        </li>
+                    </ol>
+                    
+                    <strong>Frontend:</strong>
+                    <ol>
+                        <li>Przejdź do folderu frontend:
+                            <pre><code>cd frontend</code></pre>
+                        </li>
+                        <li>Uruchom serwer HTTP:
+                            <pre><code>python -m http.server 8000</code></pre>
+                        </li>
+                        <li>Otwórz w przeglądarce: <strong>http://localhost:8000</strong></li>
+                    </ol>
+                    
                     <h3>Dane do Logowania</h3>
+                    <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+                        <tr style="border-bottom: 1px solid #ddd;">
+                            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Rola</strong></td>
+                            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Nazwa użytkownika</strong></td>
+                            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Hasło</strong></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;">Administrator</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;"><code>admin</code></td>
+                            <td style="padding: 10px; border: 1px solid #ddd;"><code>password</code></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;">Magazynier</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;"><code>magazynier</code></td>
+                            <td style="padding: 10px; border: 1px solid #ddd;"><code>password</code></td>
+                        </tr>
+                    </table>
+                    
+                    <h3>Funkcje Aplikacji</h3>
                     <ul>
-                        <li><strong>Nazwa użytkownika:</strong> admin</li>
-                        <li><strong>Hasło:</strong> password</li>
-                    </ul>
-                    
-                    <h3>Lokalne Uruchomienie bez Dockera</h3>
-                    
-                    <h4>Backend (Go):</h4>
-                    <pre><code>cd backend
-go mod download
-go run main.go</code></pre>
-                    
-                    <h4>Frontend:</h4>
-                    <p>Otwórz plik <code>frontend/index.html</code> w przeglądarce lub uruchom lokalny serwer:</p>
-                    <pre><code>cd frontend
-python -m http.server 8000</code></pre>
-                    
-                    <h3>Struktura Projektu</h3>
-                    <ul>
-                        <li><code>backend/</code> - Kod aplikacji Go</li>
-                        <li><code>frontend/</code> - HTML, CSS, JavaScript</li>
-                        <li><code>docs/</code> - Dokumentacja i Wiki</li>
-                        <li><code>initdb/</code> - Skrypty bazy danych</li>
-                        <li><code>docker-compose.yml</code> - Konfiguracja Docker</li>
+                        <li><strong>Katalog Publiczny</strong> - Przeglądanie listy dostępnych produktów lokalnych</li>
+                        <li><strong>Zarządzanie Zapasami</strong> - Dodawanie, edytowanie i usuwanie produktów (tylko dla admin/magazynier)</li>
+                        <li><strong>Uwierzytelnianie JWT</strong> - Bezpieczne logowanie z tokenami JWT</li>
+                        <li><strong>Role-based Access Control</strong> - Różne uprawnienia dla różnych ról użytkowników</li>
                     </ul>
                     
                     <h3>Rozwiązywanie Problemów</h3>
                     <ul>
-                        <li><strong>Port zajęty:</strong> Zmień port w docker-compose.yml</li>
-                        <li><strong>Błędy bazy danych:</strong> Sprawdź init.sql w folderze initdb/</li>
-                        <li><strong>Błędy frontendu:</strong> Czyść cache przeglądarki (Ctrl+Shift+Delete)</li>
+                        <li><strong>Port 8080 zajęty:</strong> Zmień port w docker-compose.yml (zmiana wartości <code>ports: "8080:80"</code>)</li>
+                        <li><strong>Błędy bazy danych:</strong> Sprawdź plik <code>initdb/init.sql</code> i upewnij się, że PostgreSQL jest uruchomiony</li>
+                        <li><strong>CSS/JS nie ładuje się:</strong> Wyczyść cache przeglądarki (Ctrl+Shift+Delete lub Cmd+Shift+Delete)</li>
+                        <li><strong>Błędy CORS:</strong> Upewnij się, że backend i frontend używają prawidłowych portów</li>
+                        <li><strong>Nie mogę się zalogować:</strong> Upewnij się, że baza danych została zainicjalizowana z domyślnymi użytkownikami</li>
+                        <li><strong>Błędy Docker:</strong> Spróbuj: <code>docker-compose down && docker-compose up --build</code></li>
                     </ul>
+                    
+                    <h3>Struktura Projektu</h3>
+                    <ul>
+                        <li><code>backend/</code> - REST API w Go</li>
+                        <li><code>frontend/</code> - HTML, CSS, JavaScript</li>
+                        <li><code>nginx/</code> - Konfiguracja reverse proxy</li>
+                        <li><code>initdb/</code> - Skrypty inicjalizacji bazy danych</li>
+                        <li><code>docker-compose.yml</code> - Konfiguracja kontenerów</li>
+                    </ul>
+                    
+                    <h3>Pierwsze Kroki Po Uruchomieniu</h3>
+                    <ol>
+                        <li>Zaloguj się na konto <strong>admin</strong> (hasło: password)</li>
+                        <li>Przejdź do sekcji "Zarządzanie Zapasami"</li>
+                        <li>Dodaj kilka produktów (oscypki, ciupagi, ser, miód itp.)</li>
+                        <li>Przeglądaj katalog publicznie dostępnych produktów</li>
+                        <li>Zarządzaj zapasami i cenami</li>
+                    </ol>
                 </div>
             `;
         } else if (page === 'Zadania') {
             pageContent.innerHTML = `
+                <div class="task-post">
+                    <div class="post-header">
+                        <h3 class="post-date">30 kwietnia 2026</h3>
+                    </div>
+                    <div class="post-content">
+                        <h4>Dokumentacja</h4>
+                        <ul>
+                            <li>Aktualizacja dokumentacji technicznej</li>
+                        </ul>
+
+                        <h4>Programowanie</h4>
+                        <ul>
+                            <li>Modul katalog produktów i zarządzania produktami</li>
+                        </ul>
+                    </div>
+                </div>
+
                 <div class="task-post">
                     <div class="post-header">
                         <h3 class="post-date">20 kwietnia 2026</h3>

@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lokalny Koszyk</title>
+  <title>Katalog - Lokalny Koszyk</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,1..1000&display=swap" rel="stylesheet">
   <link rel="icon" href="/images/favicon.png" type="image/png">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
   <nav class="navbar">
@@ -22,11 +22,26 @@
     </div>
   </nav>
 
-  <main class="landing-content">
-    <div class="landing-hero">
-      <h1>Lokalny Koszyk</h1>
-      <p>Platforma do zarządzania lokalnym e-commerce</p>
+  <main class="catalogue-container">
+    <h1>Katalog Produktów</h1>
+    <div class="products-grid" id="productsGrid">
+      <div class="loading">Wczytywanie produktów...</div>
     </div>
   </main>
+
+  <!-- MODAL - Product Detail -->
+  <div id="productModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalProductName"></h3>
+        <button class="modal-close" id="modalCloseBtn">&times;</button>
+      </div>
+      <div id="modalProductContent" class="modal-body">
+        <!-- Content will be inserted here -->
+      </div>
+    </div>
+  </div>
+
+  <script src="js/catalogue.js"></script>
 </body>
 </html>

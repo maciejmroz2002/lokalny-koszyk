@@ -4,67 +4,68 @@ Webowy system do zarządzania hurtownią produktów regionalnych. Automatyzuje p
 
 ## Technologia
 
-- **Backend:** Go
-- **Frontend:** HTMX, HTML, CSS, JavaScript
+- **Backend:** Go (REST API, JWT Authentication)
+- **Frontend:** HTML, CSS, JavaScript
 - **Baza danych:** PostgreSQL
 - **Konteneryzacja:** Docker, Docker Compose
+- **Serwer:** Nginx (reverse proxy)
 
 ## Główne Funkcje
 
+- 🔐 Autentykacja JWT z rolami użytkowników (admin, magazynier)
 - 📦 Monitorowanie stanów magazynowych w czasie rzeczywistym
-- 👥 Zarządzanie relacjami z dostawcami (CRM)
-- 📨 Automatyczne alerty o brakach towaru
-- 🛒 Obsługa zamówień
+- 🛍️ Publiczny katalog produktów
+- 📋 Zarządzanie produktami i zapasami (dla uprawnień użytkowników)
+- 👥 Obsługa wielu ról użytkowników
+- 📊 Panel administratora z dashboardem
 
 ## Struktura Projektu
 
 ```
 lokalny-koszyk/
 ├── backend/                 # Kod aplikacji Go
-│   ├── main.go             # Punkt wejścia aplikacji
-│   └── go.mod              # Zależności Go
+│   ├── main.go             # REST API, middleware, handlery
+│   ├── go.mod              # Zależności Go
+│   └── Dockerfile          # Obraz Docker
 ├── frontend/               # Kod frontendu
 │   ├── index.html          # Strona główna
 │   ├── login.html          # Strona logowania
+│   ├── catalogue.html      # Katalog produktów
 │   ├── dashboard.html      # Panel zarządzania
-│   ├── css/                # Stylizacja
-│   └── js/                 # Logika frontendu
-├── docs/                   # Dokumentacja i Wiki
-│   ├── index.html          # Wiki główna
-│   ├── css/                # Style Wiki
-│   └── js/                 # Skrypty Wiki
-├── initdb/                 # Skrypty inicjalizacji bazy danych
-│   └── init.sql            # Schemat bazy danych
-└── docker-compose.yml      # Konfiguracja Docker Compose
+│   ├── docs.html           # Wiki i dokumentacja
+│   ├── css/
+│   │   ├── style.css       # Style główne
+│   │   └── docs-style.css  # Style Wiki
+│   └── js/
+│       ├── script.js       # Logika logowania
+│       ├── catalogue.js    # Logika katalogów
+│       ├── dashboard.js    # Logika dashboardu
+│       └── docs-script.js  # Logika Wiki
+├── nginx/                  # Konfiguracja proxy
+│   └── nginx.conf          # Reguły routingu
+├── initdb/                 # Inicjalizacja bazy
+│   └── init.sql            # Schemat i dane
+└── docker-compose.yml      # Orkiestracja
 ```
 
 ## Wymagania
 
-- Docker i Docker Compose
-- Go 1.19+ (dla lokalnego development bez Dockera)
-- Node.js (opcjonalnie, do budowania frontendu)
+- Docker i Docker Compose (dla najprostszej instalacji)
+- Go 1.19+ (dla lokalnego development)
 
 ## Instalacja i Uruchomienie
 
-### Przy użyciu Docker Compose (rekomendowane)
+### Docker Compose (rekomendowane)
 
-1. Sklonuj repozytorium:
 ```bash
 git clone <repo-url>
 cd lokalny-koszyk
-```
-
-2. Uruchom aplikację:
-```bash
 docker-compose up --build
 ```
 
-3. Otwórz w przeglądarce:
-```
-http://localhost:8080
-```
+Aplikacja będzie dostępna na: `http://localhost:8080`
 
-### Lokalne uruchomienie bez Dockera
+### Lokalne uruchomienie
 
 #### Backend:
 ```bash
@@ -74,18 +75,32 @@ go run main.go
 ```
 
 #### Frontend:
-Otwórz plik `frontend/index.html` w przeglądarce lub używając lokalnego serwera:
 ```bash
 cd frontend
 python -m http.server 8000
 ```
 
+## API Endpoints
+
+### Publiczne
+- `GET /api/catalogue` - Lista produktów
+- `GET /api/catalogue/{id}` - Szczegóły produktu
+- `POST /api/login` - Logowanie (zwraca JWT token)
+
+### Chronione (wymagają JWT)
+- `GET /api/inventory` - Lista zapasów (admin, magazynier)
+- `POST /api/inventory` - Dodaj produkt (admin, magazynier)
+- `GET /api/inventory/{id}` - Szczegóły zapasu (admin, magazynier)
+- `PUT /api/inventory/{id}` - Aktualizuj produkt (admin, magazynier)
+- `DELETE /api/inventory/{id}` - Usuń produkt (admin, magazynier)
+
 ## Dokumentacja
 
-Pełną dokumentację projektu znajdziesz w [Wiki](./docs/index.html):
-- [Plan Projektu](./docs/index.html)
-- [Instrukcje Instalacji](./docs/index.html)
-- [Architektura Systemu](./docs/index.html)
+Pełną dokumentację projektu znajdziesz w [Wiki](./frontend/docs.html):
+- Plan Projektu
+- Instrukcje Instalacji
+- Architektura Systemu
+- Historia zadań
 
 ## Logowanie
 
@@ -93,10 +108,18 @@ Domyślne dane do logowania:
 - **Nazwa użytkownika:** `admin`
 - **Hasło:** `password`
 
-## Dalszy Rozwój
+## Funkcje dla Różnych Ról
 
-Aby przyczynić się do projektu:
-1. Stwórz feature branch (`git checkout -b feature/AmazingFeature`)
-2. Commit zmian (`git commit -m 'Add some AmazingFeature'`)
+### Admin
+- Pełny dostęp do zarządzania produktami i zapasami
+- Widok katalogów
+- Panel administracyjny
+
+### Magazynier
+- Zarządzanie zapasami
+- Widok katalogów
+
+### Inne Role
+- Widok publicznego katalogów produktów
 3. Push branch (`git push origin feature/AmazingFeature`)
 4. Otwórz Pull Request
