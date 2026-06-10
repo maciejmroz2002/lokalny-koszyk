@@ -7,7 +7,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,1..1000&display=swap" rel="stylesheet">
-  <link rel="icon" href="/images/favicon.png" type="image/png">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -16,17 +15,24 @@
       <a href="index.html" class="navbar-logo">Lokalny Koszyk</a>
       <div class="navbar-links">
         <a href="catalogue.html" class="navbar-link">Katalog</a>
-        <a href="docs.html" class="navbar-link">Wiki</a>
-        <a href="login.html" class="navbar-link btn-login">Logowanie</a>
+        <a href="login.html" class="navbar-link btn-login">Zaloguj się</a>
       </div>
     </div>
   </nav>
 
-  <main class="landing-content">
-    <div class="landing-hero">
-      <h1>Lokalny Koszyk</h1>
-      <p>Platforma do zarządzania lokalnym e-commerce</p>
+  <main class="landing">
+    <h1>Hurtownia<br>produktów regionalnych.</h1>
+    <p>Zarządzaj zapasami, dostawami i zamówieniami w jednym miejscu.</p>
+    <div class="landing-actions">
+      <a href="catalogue.html" class="btn btn-secondary">Przeglądaj katalog</a>
+      <a href="login.html" class="btn btn-primary">Zaloguj się</a>
     </div>
   </main>
+
+  <script src="js/app.js"></script>
+  <script>
+    // If already logged in, redirect to dashboard
+    if (getCurrentUser()) window.location.href = 'dashboard.html';
+  </script>
 </body>
 </html>

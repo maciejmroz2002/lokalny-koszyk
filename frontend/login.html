@@ -3,57 +3,169 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lokalny Koszyk - Logowanie</title>
+  <title>Logowanie — Lokalny Koszyk</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,1..1000&display=swap" rel="stylesheet">
-  <link rel="icon" href="/images/favicon.png" type="image/png">
   <link rel="stylesheet" href="css/style.css">
 </head>
-<body class="login-page">
+<body>
   <nav class="navbar">
     <div class="navbar-container">
       <a href="index.html" class="navbar-logo">Lokalny Koszyk</a>
       <div class="navbar-links">
         <a href="catalogue.html" class="navbar-link">Katalog</a>
-        <a href="docs.html" class="navbar-link">Wiki</a>
       </div>
     </div>
   </nav>
 
-  <div class="login-container">
-    <h1>Lokalny Koszyk</h1>
-    
-    <form id="loginForm">
-      
-      <div class="form-group">
-        <label for="username">Nazwa użytkownika</label>
-        <input 
-          type="text" 
-          id="username" 
-          name="username" 
-          required
-          placeholder="admin">
+  <div class="auth-page">
+    <div class="auth-box">
+      <h2>Witaj</h2>
+      <p class="auth-sub">Zaloguj się lub utwórz konto</p>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tabLogin" onclick="switchTab('login')">Logowanie</button>
+        <button class="auth-tab" id="tabRegister" onclick="switchTab('register')">Rejestracja</button>
       </div>
 
-      <div class="form-group">
-        <label for="password">Hasło</label>
-        <input 
-          type="password" 
-          id="password" 
-          name="password" 
-          required
-          placeholder="password">
+      <!-- LOGIN FORM -->
+      <div class="auth-form" id="formLogin">
+        <div id="loginError" class="alert alert-error" style="display:none;"></div>
+        <div class="form-group">
+          <label for="loginUsername">Nazwa użytkownika</label>
+          <input type="text" id="loginUsername" placeholder="np. admin" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">Hasło</label>
+          <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <button class="btn btn-primary" id="loginBtn" onclick="doLogin()">Zaloguj się</button>
       </div>
 
-      <button type="submit" class="btn" id="loginBtn">Zaloguj się</button>
-
-      <a href="index.html" class="btn btn-secondary">Powrót</a>
-
-      <div class="error" id="errorMessage"></div>
-    </form>
+      <!-- REGISTER FORM -->
+      <div class="auth-form hidden" id="formRegister">
+        <div id="registerError" class="alert alert-error" style="display:none;"></div>
+        <div id="registerSuccess" class="alert alert-success" style="display:none;"></div>
+        <div class="form-group">
+          <label for="regUsername">Nazwa użytkownika</label>
+          <input type="text" id="regUsername" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="regPassword">Hasło</label>
+          <input type="password" id="regPassword" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="regFullName">Imię i nazwisko</label>
+          <input type="text" id="regFullName">
+        </div>
+        <div class="form-group">
+          <label for="regEmail">E-mail</label>
+          <input type="email" id="regEmail">
+        </div>
+        <div class="form-group">
+          <label for="regPhone">Telefon</label>
+          <input type="tel" id="regPhone">
+        </div>
+        <div class="form-group">
+          <label for="regAddress">Adres dostawy</label>
+          <input type="text" id="regAddress" placeholder="ul. Przykładowa 1, 80-001 Gdańsk">
+        </div>
+        <button class="btn btn-primary" id="registerBtn" onclick="doRegister()">Utwórz konto</button>
+      </div>
+    </div>
   </div>
 
-  <script src="js/script.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    if (getCurrentUser()) window.location.href = 'dashboard.html';
+
+    function switchTab(tab) {
+      document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
+      document.getElementById('tabRegister').classList.toggle('active', tab === 'register');
+      document.getElementById('formLogin').classList.toggle('hidden', tab !== 'login');
+      document.getElementById('formRegister').classList.toggle('hidden', tab !== 'register');
+    }
+
+    async function doLogin() {
+      const btn = document.getElementById('loginBtn');
+      const errDiv = document.getElementById('loginError');
+      const username = document.getElementById('loginUsername').value.trim();
+      const password = document.getElementById('loginPassword').value;
+
+      errDiv.style.display = 'none';
+      if (!username || !password) { showErr(errDiv, 'Uzupełnij wszystkie pola.'); return; }
+
+      btn.disabled = true;
+      btn.textContent = 'Logowanie…';
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        if (!res.ok) { showErr(errDiv, 'Błędna nazwa użytkownika lub hasło.'); return; }
+        const data = await res.json();
+        setToken(data.token);
+        window.location.href = 'dashboard.html';
+      } catch {
+        showErr(errDiv, 'Błąd połączenia z serwerem.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Zaloguj się';
+      }
+    }
+
+    async function doRegister() {
+      const btn = document.getElementById('registerBtn');
+      const errDiv = document.getElementById('registerError');
+      const okDiv = document.getElementById('registerSuccess');
+      errDiv.style.display = 'none';
+      okDiv.style.display = 'none';
+
+      const body = {
+        username: document.getElementById('regUsername').value.trim(),
+        password: document.getElementById('regPassword').value,
+        full_name: document.getElementById('regFullName').value.trim(),
+        email: document.getElementById('regEmail').value.trim(),
+        phone: document.getElementById('regPhone').value.trim(),
+        address: document.getElementById('regAddress').value.trim(),
+      };
+      if (!body.username || !body.password) { showErr(errDiv, 'Nazwa użytkownika i hasło są wymagane.'); return; }
+
+      btn.disabled = true;
+      btn.textContent = 'Rejestracja…';
+      try {
+        const res = await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+          const txt = await res.text();
+          showErr(errDiv, txt || 'Błąd rejestracji.');
+          return;
+        }
+        okDiv.textContent = 'Konto utworzone! Możesz się teraz zalogować.';
+        okDiv.style.display = '';
+        setTimeout(() => switchTab('login'), 1800);
+      } catch {
+        showErr(errDiv, 'Błąd połączenia z serwerem.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Utwórz konto';
+      }
+    }
+
+    function showErr(div, msg) { div.textContent = msg; div.style.display = ''; }
+
+    // Enter key support
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const formLogin = document.getElementById('formLogin');
+      if (!formLogin.classList.contains('hidden')) doLogin();
+      else doRegister();
+    });
+  </script>
 </body>
 </html>

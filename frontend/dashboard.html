@@ -3,127 +3,510 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lokalny Koszyk</title>
+  <title>Panel — Lokalny Koszyk</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,1..1000&display=swap" rel="stylesheet">
-  <link rel="icon" href="/images/favicon.png" type="image/png">
   <link rel="stylesheet" href="css/style.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 </head>
 <body>
-  <div class="dashboard">
-    <header class="dashboard-header">
-      <h1>Lokalny Koszyk - Dashboard</h1>
-      <div class="user-info">
-        <span id="username"></span>
-        <span id="userRole" class="role-badge"></span>
-        <button id="logoutBtn" class="logout-btn" title="Wyloguj się">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-            <polyline points="16 17 21 12 16 7"></polyline>
-            <line x1="21" y1="12" x2="9" y2="12"></line>
-          </svg>
-        </button>
-      </div>
-    </header>
-    
-    <div class="dashboard-wrapper">
-      <aside class="dashboard-sidebar">
-        <nav class="dashboard-menu">
-          <button class="menu-item active" data-view="catalogue">
-            Katalog
-          </button>
-          <button class="menu-item" id="inventoryMenuBtn" data-view="inventory" style="display: none;">
-            Zarządzanie Zapasami
-          </button>
-        </nav>
-      </aside>
 
-      <main class="dashboard-content">
-        <!-- CATALOGUE VIEW -->
-        <div class="view-section active" id="catalogue-view">
-          <h2>Katalog Produktów</h2>
-          <div class="products-grid" id="catalogueGrid">
-            <div class="loading">Wczytywanie produktów...</div>
+  <!-- ===== NAVBAR ===== -->
+  <nav class="navbar">
+    <div class="navbar-container">
+      <a href="index.html" class="navbar-logo">Lokalny Koszyk</a>
+      <div class="navbar-links">
+        <a href="catalogue.html" class="navbar-link">Katalog</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ===== LAYOUT ===== -->
+  <div class="dash-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="dash-sidebar">
+      <div class="dash-user">
+        <div class="dash-user-name" id="sidebarUsername">—</div>
+        <span class="badge" id="sidebarRoleBadge"></span>
+      </div>
+
+      <nav class="dash-nav">
+        <!-- shared -->
+        <button class="nav-item active" data-view="catalogue">📦 Katalog</button>
+
+        <!-- admin + magazynier -->
+        <span class="nav-section-label hidden" id="labelInventory">Magazyn</span>
+        <button class="nav-item hidden" data-view="inventory" id="navInventory">🗂 Zapasy</button>
+        <button class="nav-item hidden" data-view="moveItem" id="navMove">↔ Przesuń towar</button>
+        <button class="nav-item hidden" data-view="deliveries" id="navDeliveries">🚚 Dostawy</button>
+
+        <!-- admin only -->
+        <span class="nav-section-label hidden" id="labelAdmin">Administracja</span>
+        <button class="nav-item hidden" data-view="orders" id="navOrdersAdmin">🛒 Zamówienia</button>
+        <button class="nav-item hidden" data-view="suppliers" id="navSuppliers">🏭 Dostawcy</button>
+        <button class="nav-item hidden" data-view="clients" id="navClients">👥 Klienci</button>
+
+        <!-- supplier -->
+        <span class="nav-section-label hidden" id="labelSupplier">Dostawca</span>
+        <button class="nav-item hidden" data-view="myDeliveries" id="navMyDeliveries">📋 Moje dostawy</button>
+        <button class="nav-item hidden" data-view="newDelivery" id="navNewDelivery">➕ Nowa dostawa</button>
+        <button class="nav-item hidden" data-view="supplierProfile" id="navSupplierProfile">👤 Mój profil</button>
+
+        <!-- client -->
+        <span class="nav-section-label hidden" id="labelClient">Klient</span>
+        <button class="nav-item hidden" data-view="myOrders" id="navMyOrders">🛒 Moje zamówienia</button>
+        <button class="nav-item hidden" data-view="newOrder" id="navNewOrder">➕ Nowe zamówienie</button>
+        <button class="nav-item hidden" data-view="clientProfile" id="navClientProfile">👤 Mój profil</button>
+      </nav>
+
+      <div class="dash-sidebar-footer">
+        <button class="nav-item" id="logoutBtn">🚪 Wyloguj się</button>
+      </div>
+    </aside>
+
+    <!-- CONTENT -->
+    <main class="dash-content" id="dashContent">
+
+      <!-- ============================================================
+           CATALOGUE VIEW (shared)
+           ============================================================ -->
+      <div class="view active" id="view-catalogue">
+        <div class="view-header">
+          <div class="view-header-left">
+            <h2>Katalog produktów</h2>
+            <span class="view-header-sub">Publiczny widok dostępnych produktów</span>
           </div>
         </div>
+        <div id="catGrid" class="products-grid"
+             hx-get="/api/catalogue"
+             hx-trigger="revealed"
+             hx-target="#catGrid"
+             hx-swap="innerHTML">
+          <div class="loading-inline">Wczytywanie…</div>
+        </div>
+      </div>
 
-        <!-- INVENTORY MANAGEMENT VIEW -->
-        <div class="view-section" id="inventory-view">
-          <div class="inventory-header">
-            <h2>Zarządzanie Zapasami</h2>
-            <button id="addProductBtn" class="btn btn-icon-only" title="Dodaj produkt">+</button>
+      <!-- ============================================================
+           INVENTORY VIEW (admin + magazynier)
+           ============================================================ -->
+      <div class="view" id="view-inventory">
+        <div class="view-header">
+          <div class="view-header-left">
+            <h2>Zarządzanie zapasami</h2>
+            <span class="view-header-sub">Pełna lista produktów w magazynie</span>
           </div>
-          
-          <table class="inventory-table" id="inventoryTable">
+          <button class="btn btn-primary" onclick="openModal('modalAddProduct')">+ Dodaj produkt</button>
+        </div>
+        <div class="table-wrap">
+          <table>
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Nazwa</th>
-                <th>Lokalizacja</th>
-                <th>Cena</th>
-                <th>Ilość</th>
-                <th>Akcje</th>
+                <th>ID</th><th>Nazwa</th><th>Lokalizacja</th><th>Cena</th><th>Ilość</th><th>Akcje</th>
               </tr>
             </thead>
-            <tbody id="inventoryBody">
-              <tr><td colspan="6" class="loading">Wczytywanie...</td></tr>
+            <tbody id="invBody">
+              <tr class="loading-row"><td colspan="6">Wczytywanie…</td></tr>
             </tbody>
           </table>
         </div>
-      </main>
-    </div>
-
-    <!-- MODAL - Add/Edit Product -->
-    <div id="productModal" class="modal" style="display: none;">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 id="modalTitle">Dodaj Produkt</h3>
-          <button class="modal-close" id="modalCloseBtn">&times;</button>
-        </div>
-        <form id="productForm">
-          <div class="form-group">
-            <label for="productName">Nazwa Produktu</label>
-            <input type="text" id="productName" required>
-          </div>
-          <div class="form-group">
-            <label for="productLocation">Lokalizacja</label>
-            <input type="text" id="productLocation" required>
-          </div>
-          <div class="form-group">
-            <label for="productPrice">Cena (zł)</label>
-            <input type="number" id="productPrice" step="0.01" required>
-          </div>
-          <div class="form-group">
-            <label for="productCount">Ilość</label>
-            <input type="number" id="productCount" required>
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary" id="submitBtn">Zapisz</button>
-            <button type="button" class="btn btn-secondary" id="cancelBtn">Anuluj</button>
-          </div>
-        </form>
       </div>
-    </div>
 
-    <!-- MODAL - Product Details in Catalogue -->
-    <div id="catalogueDetailModal" class="modal" style="display: none;">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>Szczegóły Produktu</h3>
-          <button class="modal-close" onclick="document.getElementById('catalogueDetailModal').style.display='none'">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="product-details">
-            <p><strong>Nazwa:</strong> <span id="catalogueDetailName"></span></p>
-            <p><strong>Lokalizacja:</strong> <span id="catalogueDetailLocation"></span></p>
-            <p><strong>Cena:</strong> <span id="catalogueDetailPrice"></span> zł</p>
+      <!-- ============================================================
+           MOVE ITEM VIEW (admin + magazynier)
+           ============================================================ -->
+      <div class="view" id="view-moveItem">
+        <div class="view-header">
+          <div class="view-header-left">
+            <h2>Przesuń towar</h2>
+            <span class="view-header-sub">Zmień lokalizację produktu w magazynie</span>
           </div>
+        </div>
+        <div class="card" style="max-width:480px;">
+          <div style="display:flex;flex-direction:column;gap:1rem;">
+            <div class="form-group">
+              <label for="moveProductId">Produkt</label>
+              <select id="moveProductId"></select>
+            </div>
+            <div class="form-group">
+              <label for="moveLocation">Nowa lokalizacja</label>
+              <input type="text" id="moveLocation" placeholder="np. Regał C">
+            </div>
+            <div class="form-group">
+              <label for="moveQty">Ilość (0 = cały stock)</label>
+              <input type="number" id="moveQty" value="0" min="0">
+            </div>
+            <div id="moveError" class="alert alert-error" style="display:none;"></div>
+            <div id="moveSuccess" class="alert alert-success" style="display:none;"></div>
+            <button class="btn btn-primary" onclick="doMoveItem()">Przesuń</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           DELIVERIES VIEW (admin + magazynier)
+           ============================================================ -->
+      <div class="view" id="view-deliveries">
+        <div class="view-header">
+          <h2>Dostawy</h2>
+          <span class="view-header-sub">Zarządzaj przychodzącymi dostawami od dostawców</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>Dostawca</th><th>Produkt</th><th>Ilość</th><th>Cena/szt.</th><th>Status</th><th>Akcje</th>
+              </tr>
+            </thead>
+            <tbody id="deliveriesBody">
+              <tr class="loading-row"><td colspan="7">Wczytywanie…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           ORDERS VIEW (admin + magazynier — all orders)
+           ============================================================ -->
+      <div class="view" id="view-orders">
+        <div class="view-header">
+          <div class="view-header-left">
+            <h2>Zamówienia</h2>
+            <span class="view-header-sub">Wszystkie zamówienia klientów</span>
+          </div>
+          <select id="orderStatusFilter" class="btn btn-secondary" onchange="loadAllOrders()" style="padding:.5rem .85rem;font-weight:500;">
+            <option value="">Wszystkie statusy</option>
+            <option value="pending">Oczekujące</option>
+            <option value="confirmed">Potwierdzone</option>
+            <option value="shipped">Wysłane</option>
+            <option value="delivered">Dostarczone</option>
+            <option value="cancelled">Anulowane</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>Klient</th><th>Status</th><th>Kwota</th><th>Data</th><th>Akcje</th>
+              </tr>
+            </thead>
+            <tbody id="ordersBody">
+              <tr class="loading-row"><td colspan="6">Wczytywanie…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           SUPPLIERS VIEW (admin)
+           ============================================================ -->
+      <div class="view" id="view-suppliers">
+        <div class="view-header"><h2>Dostawcy</h2></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Użytkownik</th><th>Firma</th><th>Telefon</th><th>E-mail</th></tr>
+            </thead>
+            <tbody id="suppliersBody">
+              <tr class="loading-row"><td colspan="4">Wczytywanie…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           CLIENTS VIEW (admin)
+           ============================================================ -->
+      <div class="view" id="view-clients">
+        <div class="view-header"><h2>Klienci</h2></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Użytkownik</th><th>Imię i nazwisko</th><th>E-mail</th><th>Telefon</th><th>Adres</th></tr>
+            </thead>
+            <tbody id="clientsBody">
+              <tr class="loading-row"><td colspan="5">Wczytywanie…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           MY DELIVERIES VIEW (supplier)
+           ============================================================ -->
+      <div class="view" id="view-myDeliveries">
+        <div class="view-header">
+          <h2>Moje dostawy</h2>
+          <button class="btn btn-primary" onclick="switchView('newDelivery')">+ Nowa dostawa</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Produkt</th><th>Ilość</th><th>Cena/szt.</th><th>Status</th><th>Uwagi</th><th>Data</th></tr>
+            </thead>
+            <tbody id="myDeliveriesBody">
+              <tr class="loading-row"><td colspan="7">Wczytywanie…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           NEW DELIVERY VIEW (supplier)
+           ============================================================ -->
+      <div class="view" id="view-newDelivery">
+        <div class="view-header">
+          <h2>Nowa dostawa</h2>
+        </div>
+        <div class="card" style="max-width:480px;">
+          <div style="display:flex;flex-direction:column;gap:1rem;">
+            <div class="form-group">
+              <label for="ndProductName">Nazwa produktu</label>
+              <input type="text" id="ndProductName" placeholder="np. Oscypki z Tatr">
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="ndQuantity">Ilość</label>
+                <input type="number" id="ndQuantity" min="1" value="1">
+              </div>
+              <div class="form-group">
+                <label for="ndPrice">Cena proponowana (zł/szt.)</label>
+                <input type="number" id="ndPrice" step="0.01" min="0.01">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="ndNotes">Uwagi (opcjonalne)</label>
+              <textarea id="ndNotes"></textarea>
+            </div>
+            <div id="ndError" class="alert alert-error" style="display:none;"></div>
+            <div id="ndSuccess" class="alert alert-success" style="display:none;"></div>
+            <div class="form-actions">
+              <button class="btn btn-primary" onclick="doCreateDelivery()">Wyślij zgłoszenie</button>
+              <button class="btn btn-secondary" onclick="switchView('myDeliveries')">Anuluj</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           SUPPLIER PROFILE (supplier)
+           ============================================================ -->
+      <div class="view" id="view-supplierProfile">
+        <div class="view-header">
+          <h2>Mój profil</h2>
+          <button class="btn btn-secondary" id="editSupplierBtn" onclick="toggleSupplierEdit(true)">Edytuj</button>
+        </div>
+        <div class="card" style="max-width:480px;">
+          <!-- read -->
+          <div id="supplierProfileView" class="profile-grid">
+            <div class="profile-field"><label>Nazwa firmy</label><span id="spCompany">—</span></div>
+            <div class="profile-field"><label>Telefon</label><span id="spPhone">—</span></div>
+            <div class="profile-field"><label>E-mail</label><span id="spEmail">—</span></div>
+          </div>
+          <!-- edit -->
+          <div id="supplierProfileEdit" style="display:none;flex-direction:column;gap:1rem;">
+            <div class="form-group"><label for="spEditCompany">Nazwa firmy</label><input type="text" id="spEditCompany"></div>
+            <div class="form-group"><label for="spEditPhone">Telefon</label><input type="tel" id="spEditPhone"></div>
+            <div class="form-group"><label for="spEditEmail">E-mail</label><input type="email" id="spEditEmail"></div>
+            <div id="spError" class="alert alert-error" style="display:none;"></div>
+            <div class="form-actions">
+              <button class="btn btn-primary" onclick="saveSupplierProfile()">Zapisz</button>
+              <button class="btn btn-secondary" onclick="toggleSupplierEdit(false)">Anuluj</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           MY ORDERS VIEW (client)
+           ============================================================ -->
+      <div class="view" id="view-myOrders">
+        <div class="view-header">
+          <h2>Moje zamówienia</h2>
+          <button class="btn btn-primary" onclick="switchView('newOrder')">+ Nowe zamówienie</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Status</th><th>Kwota</th><th>Adres</th><th>Data</th><th>Akcje</th></tr>
+            </thead>
+            <tbody id="myOrdersBody">
+              <tr class="loading-row"><td colspan="6">Wczytywanie…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           NEW ORDER VIEW (client)
+           ============================================================ -->
+      <div class="view" id="view-newOrder">
+        <div class="view-header">
+          <h2>Nowe zamówienie</h2>
+        </div>
+        <div class="card" style="max-width:600px;">
+          <div style="display:flex;flex-direction:column;gap:1.25rem;">
+            <div class="form-group">
+              <label for="noAddress">Adres dostawy</label>
+              <input type="text" id="noAddress">
+            </div>
+            <div class="form-group">
+              <label for="noNotes">Uwagi (opcjonalne)</label>
+              <textarea id="noNotes"></textarea>
+            </div>
+
+            <div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem;">
+                <span style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);">Produkty</span>
+                <button class="btn btn-secondary btn-sm" onclick="addOrderItemRow()">+ Dodaj produkt</button>
+              </div>
+              <div id="orderItemsList" class="order-items-list"></div>
+            </div>
+
+            <div class="order-total" id="orderTotal"></div>
+            <div id="noError" class="alert alert-error" style="display:none;"></div>
+            <div id="noSuccess" class="alert alert-success" style="display:none;"></div>
+            <div class="form-actions">
+              <button class="btn btn-primary" onclick="doCreateOrder()">Złóż zamówienie</button>
+              <button class="btn btn-secondary" onclick="switchView('myOrders')">Anuluj</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           CLIENT PROFILE (client)
+           ============================================================ -->
+      <div class="view" id="view-clientProfile">
+        <div class="view-header">
+          <h2>Mój profil</h2>
+          <button class="btn btn-secondary" onclick="toggleClientEdit(true)">Edytuj</button>
+        </div>
+        <div class="card" style="max-width:480px;">
+          <!-- read -->
+          <div id="clientProfileView" class="profile-grid">
+            <div class="profile-field"><label>Imię i nazwisko</label><span id="cpFullName">—</span></div>
+            <div class="profile-field"><label>E-mail</label><span id="cpEmail">—</span></div>
+            <div class="profile-field"><label>Telefon</label><span id="cpPhone">—</span></div>
+            <div class="profile-field" style="grid-column:1/-1;"><label>Adres</label><span id="cpAddress">—</span></div>
+          </div>
+          <!-- edit -->
+          <div id="clientProfileEdit" style="display:none;flex-direction:column;gap:1rem;">
+            <div class="form-group"><label for="cpEditFullName">Imię i nazwisko</label><input type="text" id="cpEditFullName"></div>
+            <div class="form-group"><label for="cpEditEmail">E-mail</label><input type="email" id="cpEditEmail"></div>
+            <div class="form-group"><label for="cpEditPhone">Telefon</label><input type="tel" id="cpEditPhone"></div>
+            <div class="form-group"><label for="cpEditAddress">Adres</label><input type="text" id="cpEditAddress"></div>
+            <div id="cpError" class="alert alert-error" style="display:none;"></div>
+            <div class="form-actions">
+              <button class="btn btn-primary" onclick="saveClientProfile()">Zapisz</button>
+              <button class="btn btn-secondary" onclick="toggleClientEdit(false)">Anuluj</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div><!-- end dash-layout -->
+
+  <!-- ============================================================
+       MODALS
+       ============================================================ -->
+
+  <!-- Add/Edit product (inventory) -->
+  <div class="modal-overlay" id="modalAddProduct">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalProductTitle">Dodaj produkt</h3>
+        <button class="modal-close" onclick="closeModal('modalAddProduct')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editProductId">
+        <div class="form-group"><label for="mpName">Nazwa produktu</label><input type="text" id="mpName"></div>
+        <div class="form-group"><label for="mpLocation">Lokalizacja</label><input type="text" id="mpLocation"></div>
+        <div class="form-row">
+          <div class="form-group"><label for="mpPrice">Cena (zł)</label><input type="number" id="mpPrice" step="0.01" min="0"></div>
+          <div class="form-group"><label for="mpCount">Ilość</label><input type="number" id="mpCount" min="0"></div>
+        </div>
+        <div id="mpError" class="alert alert-error" style="display:none;"></div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="saveProduct()">Zapisz</button>
+          <button class="btn btn-secondary" onclick="closeModal('modalAddProduct')">Anuluj</button>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Update delivery status -->
+  <div class="modal-overlay" id="modalDeliveryStatus">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Zmień status dostawy</h3>
+        <button class="modal-close" onclick="closeModal('modalDeliveryStatus')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="dsDeliveryId">
+        <div class="form-group">
+          <label for="dsStatus">Nowy status</label>
+          <select id="dsStatus" onchange="toggleLocationField()">
+            <option value="accepted">Zaakceptowana</option>
+            <option value="rejected">Odrzucona</option>
+            <option value="completed">Zrealizowana (przyjęcie do magazynu)</option>
+          </select>
+        </div>
+        <div class="form-group" id="dsLocationGroup" style="display:none;">
+          <label for="dsLocation">Lokalizacja w magazynie (wymagana)</label>
+          <input type="text" id="dsLocation" placeholder="np. Chłodnia 03">
+        </div>
+        <div class="form-group">
+          <label for="dsNotes">Uwagi</label>
+          <textarea id="dsNotes"></textarea>
+        </div>
+        <div id="dsError" class="alert alert-error" style="display:none;"></div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="saveDeliveryStatus()">Zapisz</button>
+          <button class="btn btn-secondary" onclick="closeModal('modalDeliveryStatus')">Anuluj</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Order detail (items list) -->
+  <div class="modal-overlay" id="modalOrderDetail">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3 id="odTitle">Szczegóły zamówienia</h3>
+        <button class="modal-close" onclick="closeModal('modalOrderDetail')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="odMeta" class="profile-grid" style="margin-bottom:1rem;"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Produkt</th><th>Ilość</th><th>Cena/szt.</th><th>Wartość</th></tr></thead>
+            <tbody id="odItemsBody"></tbody>
+          </table>
+        </div>
+        <div id="odStatusSection" style="margin-top:1.25rem;display:none;">
+          <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;">
+            <select id="odNewStatus" style="padding:.5rem .75rem;border:1px solid var(--border-strong);border-radius:var(--radius);font-family:inherit;font-size:.875rem;">
+              <option value="confirmed">Potwierdź</option>
+              <option value="shipped">Wysłane</option>
+              <option value="delivered">Dostarczone</option>
+              <option value="cancelled">Anuluj zamówienie</option>
+            </select>
+            <input type="text" id="odStatusNote" placeholder="Uwaga (opcjonalnie)" style="flex:1;padding:.5rem .75rem;border:1px solid var(--border-strong);border-radius:var(--radius);font-family:inherit;font-size:.875rem;">
+            <button class="btn btn-primary btn-sm" onclick="saveOrderStatus()">Zmień status</button>
+          </div>
+        </div>
+        <div id="odClientCancelSection" style="margin-top:1.25rem;display:none;">
+          <button class="btn btn-danger" onclick="doCancelMyOrder()">Anuluj zamówienie</button>
+        </div>
+        <div id="odError" class="alert alert-error" style="display:none;margin-top:.75rem;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
   <script src="js/dashboard.js"></script>
 </body>
 </html>

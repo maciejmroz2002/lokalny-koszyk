@@ -3,45 +3,98 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Katalog - Lokalny Koszyk</title>
+  <title>Katalog — Lokalny Koszyk</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,1..1000&display=swap" rel="stylesheet">
-  <link rel="icon" href="/images/favicon.png" type="image/png">
-  <link rel="stylesheet" href="./css/style.css">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
 </head>
 <body>
   <nav class="navbar">
     <div class="navbar-container">
       <a href="index.html" class="navbar-logo">Lokalny Koszyk</a>
       <div class="navbar-links">
-        <a href="catalogue.html" class="navbar-link">Katalog</a>
-        <a href="docs.html" class="navbar-link">Wiki</a>
-        <a href="login.html" class="navbar-link btn-login">Logowanie</a>
+        <a href="catalogue.html" class="navbar-link active">Katalog</a>
+        <span id="navAuthLink"></span>
       </div>
     </div>
   </nav>
 
-  <main class="catalogue-container">
-    <h1>Katalog Produktów</h1>
-    <div class="products-grid" id="productsGrid">
-      <div class="loading">Wczytywanie produktów...</div>
-    </div>
-  </main>
+  <div class="catalogue-page">
+    <h1>Katalog produktów</h1>
 
-  <!-- MODAL - Product Detail -->
-  <div id="productModal" class="modal" style="display: none;">
-    <div class="modal-content">
+    <div id="productsGrid" class="products-grid"
+         hx-get="/api/catalogue"
+         hx-trigger="load"
+         hx-target="#productsGrid"
+         hx-swap="innerHTML">
+      <div class="loading-inline">Wczytywanie produktów…</div>
+    </div>
+  </div>
+
+  <!-- Modal detail -->
+  <div class="modal-overlay" id="detailOverlay">
+    <div class="modal">
       <div class="modal-header">
-        <h3 id="modalProductName"></h3>
-        <button class="modal-close" id="modalCloseBtn">&times;</button>
+        <h3 id="detailName"></h3>
+        <button class="modal-close" onclick="closeDetail()">&times;</button>
       </div>
-      <div id="modalProductContent" class="modal-body">
-        <!-- Content will be inserted here -->
+      <div class="modal-body">
+        <div class="profile-grid">
+          <div class="profile-field"><label>Lokalizacja</label><span id="detailLoc"></span></div>
+          <div class="profile-field"><label>Cena</label><span id="detailPrice"></span></div>
+        </div>
       </div>
     </div>
   </div>
 
-  <script src="js/catalogue.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    // Auth link in navbar
+    const user = getCurrentUser();
+    document.getElementById('navAuthLink').innerHTML = user
+      ? `<a href="dashboard.html" class="navbar-link btn-login">Panel</a>`
+      : `<a href="login.html" class="navbar-link btn-login">Zaloguj się</a>`;
+
+    // HTMX: transform JSON array into product cards
+    document.body.addEventListener('htmx:afterRequest', (e) => {
+      if (e.detail.elt.id !== 'productsGrid') return;
+      if (!e.detail.successful) {
+        document.getElementById('productsGrid').innerHTML = '<p style="color:var(--danger);padding:2rem;">Nie udało się wczytać katalogu.</p>';
+        return;
+      }
+      try {
+        const products = JSON.parse(e.detail.xhr.responseText) || [];
+        const grid = document.getElementById('productsGrid');
+        if (!products.length) { grid.innerHTML = '<p style="color:var(--text-muted);padding:2rem;">Brak produktów w katalogu.</p>'; return; }
+        grid.innerHTML = products.map(p => `
+          <div class="product-card" onclick="openDetail(${p.product_id},'${esc(p.product_name)}','${esc(p.product_location)}',${p.product_price})">
+            <h3>${esc(p.product_name)}</h3>
+            <div class="product-meta">
+              <span>📍 ${esc(p.product_location)}</span>
+            </div>
+            <div class="product-price">${p.product_price.toFixed(2)} zł</div>
+          </div>
+        `).join('');
+      } catch { /* handled above */ }
+    });
+
+    function openDetail(id, name, loc, price) {
+      document.getElementById('detailName').textContent = name;
+      document.getElementById('detailLoc').textContent = loc;
+      document.getElementById('detailPrice').textContent = price.toFixed(2) + ' zł';
+      document.getElementById('detailOverlay').classList.add('open');
+    }
+    function closeDetail() {
+      document.getElementById('detailOverlay').classList.remove('open');
+    }
+    document.getElementById('detailOverlay').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeDetail();
+    });
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
+  </script>
 </body>
 </html>
