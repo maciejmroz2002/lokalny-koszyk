@@ -189,55 +189,74 @@ function renderInvBoard(items) {
   const board = document.getElementById('invBoard');
   if (!board) return;
 
-  const groups = {};
-  items.forEach(i => {
-    let groupKey;
-    if (invBoardGrouping === 'category') {
-      // Group by category field
-      groupKey = i.category || 'Inne';
-    } else {
-      // Group by location (default)
-      groupKey = i.product_location || 'Brak lokalizacji';
-    }
+  // Load all locations to show all columns (including empty ones)
+  apiFetch('/api/locations').then(async locRes => {
+    const allLocs = await locRes.json();
+    if (!Array.isArray(allLocs)) allLocs = [];
     
-    if (!groups[groupKey]) groups[groupKey] = [];
-    groups[groupKey].push(i);
-  });
+    // Sort locations alphabetically
+    allLocs.sort((a, b) => a.name.localeCompare(b.name));
+    
+    // Build products map by location
+    const productsByLocation = {};
+    allLocs.forEach(loc => {
+      productsByLocation[loc.name] = [];
+    });
+    items.forEach(i => {
+      const loc = i.product_location || 'Brak lokalizacji';
+      if (!productsByLocation[loc]) productsByLocation[loc] = [];
+      productsByLocation[loc].push(i);
+    });
+    
+    if (allLocs.length === 0) {
+      board.innerHTML = '<div class="inv-board-empty">Brak lokalizacji w magazynie.</div>';
+      return;
+    }
 
-  if (!Object.keys(groups).length) {
-    board.innerHTML = '<div class="inv-board-empty">Brak produktów w magazynie.</div>';
-    return;
-  }
-
-  const icon = invBoardGrouping === 'category' ? 'tag' : 'map-pin';
-  
-  board.innerHTML = Object.entries(groups).map(([groupKey, products]) => `
-    <div class="inv-column"
-         data-location="${esc(groupKey)}">
-      <div class="inv-column-header">
-        <span class="inv-column-title"><i data-lucide="${icon}" style="width:1em;height:1em;vertical-align:middle;display:inline;"></i> ${esc(groupKey)}</span>
-        <span class="inv-column-count">${products.length} pozycji</span>
-      </div>
-      <div class="inv-column-body">
-        ${products.map(p => `
-          <div class="inv-card"
-               data-id="${p.product_id}"
-               data-location="${esc(p.product_location)}">
-            <div class="inv-card-name">${esc(p.product_name)}</div>
-            <div class="inv-card-meta">
-              <span class="inv-card-count">${p.product_count} szt.</span>
-              <span>${Number(p.product_price).toFixed(2)} zł</span>
-            </div>
-            <div class="inv-card-actions">
-              <button class="btn btn-secondary btn-sm" onclick="openEditProduct(${p.product_id})" title="Edytuj"><i data-lucide="edit-2"></i></button>
-              <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.product_id})" title="Usuń"><i data-lucide="trash-2"></i></button>
-            </div>
+    const icon = 'map-pin';
+    
+    board.innerHTML = allLocs.map(loc => {
+      const products = productsByLocation[loc.name] || [];
+      return `
+        <div class="inv-column"
+             data-location="${esc(loc.name)}">
+          <div class="inv-column-header">
+            <span class="inv-column-title"><i data-lucide="${icon}" style="width:1em;height:1em;vertical-align:middle;display:inline;"></i> ${esc(loc.name)}</span>
+            <span class="inv-column-count">${products.length} pozycji</span>
           </div>
-        `).join('')}
-      </div>
-    </div>
-  `).join('');
-  reinitIcons();
+          <div class="inv-column-body"
+               ondrop="boardDrop(event, '${esc(loc.name)}')"
+               ondragover="boardDragOver(event)"
+               ondragleave="boardDragLeave(event)"
+               style="min-height:300px;">
+            ${products.map(p => `
+              <div class="inv-card"
+                   draggable="true"
+                   ondragstart="boardDragStart(event, ${p.product_id})"
+                   ondragend="boardDragEnd(event)"
+                   data-id="${p.product_id}"
+                   data-location="${esc(p.product_location)}"
+                   style="cursor:grab;">
+                <div class="inv-card-name">${esc(p.product_name)}</div>
+                <div class="inv-card-meta">
+                  <span class="inv-card-count">${p.product_count} szt.</span>
+                  <span>${Number(p.product_price).toFixed(2)} zł</span>
+                </div>
+                <div class="inv-card-actions">
+                  <button class="btn btn-secondary btn-sm" onclick="openEditProduct(${p.product_id})" title="Edytuj"><i data-lucide="edit-2"></i></button>
+                  <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.product_id})" title="Usuń"><i data-lucide="trash-2"></i></button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    reinitIcons();
+  }).catch(() => {
+    board.innerHTML = '<div class="inv-board-empty">Błąd wczytywania lokalizacji.</div>';
+  });
 }
 
 function locationLabel(name) {
@@ -492,12 +511,75 @@ async function loadDeliveries() {
 
 function openDeliveryStatus(id) {
   document.getElementById('dsDeliveryId').value = id;
-  document.getElementById('dsStatus').value = 'accepted';
   document.getElementById('dsNotes').value = '';
-  document.getElementById('dsLocation').value = '';
   hideEl('dsError');
-  toggleLocationField();
+  
+  // Load delivery data
+  apiFetch('/api/deliveries/' + id).then(async res => {
+    if (!res.ok) {
+      showEl('dsError', 'Nie udało się wczytać dostawy');
+      return;
+    }
+    const delivery = await res.json();
+    const statusLabels = {
+      'pending': 'Oczekuje',
+      'accepted': 'Zaakceptowana',
+      'ready_for_pickup': 'Do odbioru',
+      'completed': 'Zrealizowana',
+      'cancelled': 'Anulowana',
+      'returned_to_supplier': 'Zwrot do dostawcy'
+    };
+    
+    document.getElementById('dsCurrentStatus').textContent = statusLabels[delivery.status] || delivery.status;
+    populateStatusOptions(delivery.status);
+  }).catch(err => {
+    showEl('dsError', 'Błąd połączenia: ' + err.message);
+  });
+  
+  // Load locations for dropdown
+  apiFetch('/api/locations').then(async locRes => {
+    if (locRes.ok) {
+      const locations = await locRes.json();
+      const select = document.getElementById('dsLocation');
+      select.innerHTML = '<option value="">-- Wybierz lokalizację --</option>';
+      locations.forEach(loc => {
+        const opt = document.createElement('option');
+        opt.value = loc.name;
+        opt.textContent = loc.name;
+        select.appendChild(opt);
+      });
+    }
+  }).catch(err => console.error('Error loading locations:', err));
+  
   openModal('modalDeliveryStatus');
+}
+
+function populateStatusOptions(currentStatus) {
+  const statusSelect = document.getElementById('dsStatus');
+  const options = [];
+  
+  // Determine available transitions based on currentStatus and user role
+  if (currentStatus === 'pending') {
+    // Admin can accept or reject from pending
+    if (currentUser?.role === 'admin') {
+      options.push({ value: 'accepted', label: 'Zaakceptuj' });
+      options.push({ value: 'cancelled', label: 'Odrzuć' });
+    }
+  } else if (currentStatus === 'accepted') {
+    // Supplier can request pickup or cancel from accepted
+    options.push({ value: 'ready_for_pickup', label: 'Do odbioru' });
+    options.push({ value: 'cancelled', label: 'Anuluj' });
+  } else if (currentStatus === 'ready_for_pickup') {
+    // Admin/magazynier can complete or return from ready_for_pickup
+    if (currentUser?.role === 'admin' || currentUser?.role === 'magazynier') {
+      options.push({ value: 'completed', label: 'Zrealizuj (dodaj do magazynu)' });
+      options.push({ value: 'returned_to_supplier', label: 'Zwrot do dostawcy' });
+    }
+  }
+  
+  statusSelect.innerHTML = options.map(opt => 
+    `<option value="${opt.value}">${opt.label}</option>`
+  ).join('');
 }
 
 function toggleLocationField() {
@@ -512,16 +594,33 @@ async function saveDeliveryStatus() {
     notes:    document.getElementById('dsNotes').value,
     location: document.getElementById('dsLocation').value.trim(),
   };
-  if (body.status === 'completed' && !body.location) {
-    showEl('dsError', 'Lokalizacja jest wymagana przy realizacji.'); return;
+  
+  if (!body.status) {
+    showEl('dsError', 'Wybierz nowy status.'); 
+    return;
   }
+  
+  if (body.status === 'completed' && !body.location) {
+    showEl('dsError', 'Lokalizacja jest wymagana przy realizacji.'); 
+    return;
+  }
+  
   try {
     const res = await apiFetch('/api/deliveries/' + id + '/status', { method: 'PATCH', body: JSON.stringify(body) });
-    if (!res.ok) { showEl('dsError', await res.text()); return; }
+    if (!res.ok) { 
+      const errMsg = await res.text();
+      showEl('dsError', errMsg || 'Nie udało się zmienić statusu.'); 
+      return; 
+    }
     closeModal('modalDeliveryStatus');
     loadDeliveries();
-    if (body.status === 'completed') { catalogueProducts = []; loadCatalogue(); }
-  } catch { showEl('dsError', 'Błąd połączenia.'); }
+    if (body.status === 'completed') { 
+      catalogueProducts = []; 
+      loadCatalogue(); 
+    }
+  } catch (err) { 
+    showEl('dsError', 'Błąd połączenia: ' + err.message); 
+  }
 }
 
 // ==============================
@@ -1181,8 +1280,7 @@ function renderCategoriesTable() {
         <p style="margin:0;color:var(--text-muted);font-size:0.9rem;line-height:1.4;">${esc(cat.description || '(brak opisu)')}</p>
       </div>
       <div style="display:flex;gap:0.5rem;margin-top:auto;">
-        <button class="btn btn-secondary btn-sm" onclick="openEditCategoryModal(${cat.category_id})" style="flex:1;" title="Edytuj"><i data-lucide="edit-2" style="margin-right:0.5rem;"></i>Edytuj</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteCategory(${cat.category_id})" style="flex:1;" title="Usuń"><i data-lucide="trash-2" style="margin-right:0.5rem;"></i>Usuń</button>
+        <button class="btn btn-danger" onclick="deleteCategory(${cat.category_id})" style="width:100%;" title="Usuń"><i data-lucide="trash-2" style="margin-right:0.5rem;"></i>Usuń</button>
       </div>
     </div>
   `).join('');
@@ -1190,24 +1288,10 @@ function renderCategoriesTable() {
 }
 
 function openAddCategoryModal() {
-  editingCategoryId = null;
   document.getElementById('modalCategoryTitle').textContent = 'Dodaj kategorię';
   document.getElementById('catName').value = '';
   document.getElementById('catDesc').value = '';
   document.getElementById('modalCategorySubmit').textContent = 'Dodaj';
-  hideEl('modalCategoryError');
-  openModal('modalCategory');
-}
-
-function openEditCategoryModal(catId) {
-  const cat = allCategories.find(c => c.category_id === catId);
-  if (!cat) return;
-  
-  editingCategoryId = catId;
-  document.getElementById('modalCategoryTitle').textContent = 'Edytuj kategorię';
-  document.getElementById('catName').value = cat.name;
-  document.getElementById('catDesc').value = cat.description || '';
-  document.getElementById('modalCategorySubmit').textContent = 'Zapisz';
   hideEl('modalCategoryError');
   openModal('modalCategory');
 }
@@ -1222,21 +1306,16 @@ function saveCategoryModal() {
     return;
   }
   
-  let method, url, body;
-  
-  if (editingCategoryId) {
-    // Edit existing
-    method = 'PUT';
-    url = '/api/warehouse/categories/' + editingCategoryId;
-  } else {
-    // Add new
-    method = 'POST';
-    url = '/api/warehouse/categories';
+  // Check if name already exists
+  if (allCategories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+    document.getElementById('modalCategoryError').textContent = 'Kategoria z tą nazwą już istnieje';
+    showEl('modalCategoryError');
+    return;
   }
   
-  body = JSON.stringify({ name, description });
+  const body = JSON.stringify({ name, description });
   
-  apiFetch(url, { method, body }).then(() => {
+  apiFetch('/api/warehouse/categories', { method: 'POST', body }).then(() => {
     loadCategories();
     closeModal('modalCategory');
   }).catch(err => {
@@ -1246,13 +1325,24 @@ function saveCategoryModal() {
 }
 
 function deleteCategory(catId) {
-  if (!confirm('Usunąć tę kategorię?')) return;
+  const cat = allCategories.find(c => c.category_id === catId);
+  if (!cat) return;
+  
+  if (!confirm('Usunąć kategorię "' + cat.name + '"?\n\nJeśli w magazynie są produkty z tą kategorią, nie będzie można jej usunąć.')) return;
   
   apiFetch('/api/warehouse/categories/' + catId, {
     method: 'DELETE'
-  }).then(() => {
+  }).then(async res => {
+    if (!res.ok) {
+      if (res.status === 409) {
+        alert('Nie można usunąć tej kategorii.\n\nW magazynie są produkty przypisane do tej kategorii.');
+      } else {
+        alert('Nie udało się usunąć kategorii (błąd ' + res.status + ')');
+      }
+      return;
+    }
     loadCategories();
   }).catch(err => {
-    alert('Nie udało się usunąć kategorii: ' + err.message);
+    alert('Błąd połączenia: ' + err.message);
   });
 }

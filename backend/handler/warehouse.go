@@ -318,6 +318,37 @@ func DeleteCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get category name first
+	var categoryName string
+	err = db.DB.QueryRow(
+		`SELECT name FROM categories WHERE category_id = $1`,
+		categoryID,
+	).Scan(&categoryName)
+	if err == sql.ErrNoRows {
+		http.Error(w, "category not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "query failed", http.StatusInternalServerError)
+		return
+	}
+
+	// Check if any products use this category
+	var productCount int
+	err = db.DB.QueryRow(
+		`SELECT COUNT(*) FROM inventory WHERE category = $1`,
+		categoryName,
+	).Scan(&productCount)
+	if err != nil {
+		http.Error(w, "query failed", http.StatusInternalServerError)
+		return
+	}
+
+	if productCount > 0 {
+		http.Error(w, "category has products", http.StatusConflict)
+		return
+	}
+
 	result, err := db.DB.Exec(
 		`DELETE FROM categories WHERE category_id = $1`,
 		categoryID,

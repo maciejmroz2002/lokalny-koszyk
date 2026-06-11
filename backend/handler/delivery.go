@@ -140,6 +140,12 @@ func UpdateDeliveryStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	claims, ok := middleware.ClaimsFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var req model.DeliveryStatusReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
@@ -147,12 +153,7 @@ func UpdateDeliveryStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	allowed := map[string]bool{"accepted": true, "rejected": true, "completed": true}
-	if !allowed[req.Status] {
-		http.Error(w, "status must be one of: accepted, rejected, completed", http.StatusBadRequest)
-		return
-	}
-
+	// Get current delivery
 	var d model.Delivery
 	err := db.DB.QueryRow(
 		`SELECT delivery_id, supplier_username, product_name, quantity, proposed_price, status
@@ -164,6 +165,44 @@ func UpdateDeliveryStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+
+	// Validate status transitions based on current status, user role, and requested status
+	isAdmin := claims.Role == "admin"
+	isSupplier := claims.Username == d.SupplierUsername
+	isMagazynier := claims.Role == "magazynier"
+
+	// Rule 1: Only admin can change pending → accepted
+	if d.Status == "pending" && req.Status == "accepted" {
+		if !isAdmin {
+			http.Error(w, "only admin can accept a pending delivery", http.StatusForbidden)
+			return
+		}
+	} else if d.Status == "accepted" && (req.Status == "ready_for_pickup" || req.Status == "cancelled") {
+		// Rule 2: Only supplier can change accepted → ready_for_pickup or cancelled
+		if !isSupplier {
+			http.Error(w, "only supplier can change status for accepted delivery", http.StatusForbidden)
+			return
+		}
+	} else if d.Status == "ready_for_pickup" && (req.Status == "completed" || req.Status == "returned_to_supplier") {
+		// Rule 3: Only admin or magazynier can change ready_for_pickup → completed or returned_to_supplier
+		if !(isAdmin || isMagazynier) {
+			http.Error(w, "only admin or magazynier can complete or return a delivery", http.StatusForbidden)
+			return
+		}
+		// completed requires location
+		if req.Status == "completed" && req.Location == "" {
+			http.Error(w, "location is required when completing a delivery", http.StatusBadRequest)
+			return
+		}
+	} else if d.Status == "cancelled" || d.Status == "completed" || d.Status == "returned_to_supplier" {
+		// No further status changes allowed for terminal states
+		http.Error(w, "cannot change status of "+d.Status+" delivery", http.StatusBadRequest)
+		return
+	} else {
+		// Disallow other transitions
+		http.Error(w, "invalid status transition from "+d.Status+" to "+req.Status, http.StatusBadRequest)
 		return
 	}
 
@@ -188,6 +227,36 @@ func UpdateDeliveryStatus(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "location is required when completing a delivery", http.StatusBadRequest)
 			return
 		}
+		var existingID int64
+		err = tx.QueryRow(
+			`SELECT product_id FROM inventory WHERE product_name=$1 AND product_location=$2`,
+			d.ProductName, req.Location,
+		).Scan(&existingID)
+		switch err {
+		case sql.ErrNoRows:
+			_, err = tx.Exec(
+				`INSERT INTO inventory (product_name, product_location, product_price, product_count, category)
+				 VALUES ($1,$2,$3,$4,'Inne')`,
+				d.ProductName, req.Location, d.ProposedPrice, d.Quantity,
+			)
+		case nil:
+			_, err = tx.Exec(
+				`UPDATE inventory SET product_count = product_count + $1 WHERE product_id=$2`,
+				d.Quantity, existingID,
+			)
+		}
+		if err != nil {
+			http.Error(w, "inventory update failed", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "commit failed", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 		var existingID int64
 		err = tx.QueryRow(
 			`SELECT product_id FROM inventory WHERE product_name=$1 AND product_location=$2`,

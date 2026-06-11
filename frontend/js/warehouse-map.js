@@ -568,14 +568,76 @@ function renderResourceMapUnmapped() {
   unmapped.innerHTML = '<div style="font-weight:bold;margin-bottom:0.75rem;"><i data-lucide="alert-circle" style="width:1em;height:1em;vertical-align:middle;display:inline;margin-right:0.5rem;"></i>Lokalizacje poza mapą:</div>' +
     unmappedLocs.map(loc => {
       const productsAtLocation = window.invItems?.filter(item => item.product_location === loc.name) || [];
+      
+      // Group products by name (aggregate quantities)
+      const productsByName = {};
+      productsAtLocation.forEach(p => {
+        if (!productsByName[p.product_name]) {
+          productsByName[p.product_name] = { ...p, total_count: 0, instances: [] };
+        }
+        productsByName[p.product_name].total_count += p.product_count;
+        productsByName[p.product_name].instances.push(p);
+      });
+      
       return `
-        <div style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;padding:0.5rem 0.75rem;background:#fff;border:1px solid #ddd;border-radius:4px;margin:0.25rem;text-align:center;">
-          <span>${esc(loc.name)}</span>
-          ${productsAtLocation.length > 0 ? `<button class="btn btn-secondary btn-xs" style="padding:2px 4px;" onclick="showLocationContentsPopup('${loc.name.replace(/'/g, "\\'")}', ${JSON.stringify(productsAtLocation).replace(/"/g, '&quot;')})" title="Pokaż produkty"><i data-lucide="eye" style="width:14px;height:14px;"></i></button>` : ''}
+        <div data-unmapped-loc="${loc.name}" 
+             ondrop="handleUnmappedDrop(event, '${loc.name}')"
+             ondragover="event.preventDefault(); event.dataTransfer.dropEffect='move'; event.currentTarget.style.borderColor='#f59e0b'; event.currentTarget.style.backgroundColor='#fffbf0';"
+             ondragleave="event.currentTarget.style.borderColor='#f59e0b'; event.currentTarget.style.backgroundColor='#fff';"
+             style="display:inline-block;margin:0.5rem 0.5rem 0.5rem 0;padding:0.75rem;background:#fff;border:2px solid #f59e0b;border-radius:4px;vertical-align:top;transition:all 0.2s;">
+          <div style="font-weight:bold;font-size:11px;margin-bottom:0.5rem;color:#f59e0b;">${esc(loc.name)}</div>
+          <div style="display:flex;flex-direction:column;gap:0.3rem;max-height:200px;overflow-y:auto;">
+            ${Object.entries(productsByName).length === 0 ? '<div style="color:#999;font-size:10px;text-align:center;">pusta</div>' : 
+              Object.entries(productsByName).map(([prodName, prodData]) => {
+                const firstInstance = prodData.instances[0];
+                return `
+                  <div draggable="true" 
+                       ondragstart="event.stopPropagation(); event.dataTransfer.effectAllowed='move'; event.dataTransfer.setData('productId', '${firstInstance.product_id}'); event.dataTransfer.setData('productName', '${prodName}'); event.target.style.opacity='0.5';"
+                       ondragend="event.target.style.opacity='1';"
+                       style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:3px;padding:0.4rem;font-size:10px;cursor:grab;user-select:none;">
+                    <div style="font-weight:bold;margin-bottom:0.2rem;">${esc(prodName)}</div>
+                    <div style="color:#666;">${prodData.total_count} szt. / ${Number(firstInstance.product_price).toFixed(2)} zł</div>
+                  </div>
+                `;
+              }).join('')
+            }
+          </div>
         </div>
       `;
     }).join('');
+  
   reinitIcons();
+}
+
+function handleUnmappedDrop(e, locationName) {
+  e.preventDefault();
+  
+  const productId = e.dataTransfer.getData('productId');
+  const productName = e.dataTransfer.getData('productName');
+  if (!productId || !productName) return;
+  
+  // Update all products with this name to new location
+  const itemsToUpdate = (window.invItems || []).filter(i => i.product_name === productName && i.product_location !== locationName);
+  
+  if (itemsToUpdate.length === 0) return;
+  
+  // Move all instances of this product
+  const movePromises = itemsToUpdate.map(item =>
+    apiFetch('/api/inventory/move', {
+      method: 'POST',
+      body: JSON.stringify({ product_id: item.product_id, new_location: locationName, quantity: 0 })
+    }).catch(err => console.error('Move failed:', err))
+  );
+  
+  // Optimistic update and refresh all views
+  itemsToUpdate.forEach(item => item.product_location = locationName);
+  renderResourceMapUnmapped();
+  renderResourceMap(true);
+  
+  // After all moves complete, reload inventory to sync board/list views
+  Promise.all(movePromises).then(() => {
+    setTimeout(() => loadInventory(), 300);
+  });
 }
 
 function showAddLocModal() {
@@ -814,13 +876,19 @@ function renderResourceMap(enableClickable = true) {
   canvas.style.width = width + 'px';
   canvas.style.height = height + 'px';
 
-  // Render clickable locations with content info
+  // Render locations with product tiles inside
   mappedLocs.forEach(loc => {
-    // Get products at this location
     const productsAtLocation = (window.invItems || []).filter(p => p.product_location === loc.name);
-    const contentText = productsAtLocation.length > 0 
-      ? productsAtLocation.map(p => p.product_name + ' (' + p.product_count + ')').join(', ')
-      : 'pusta';
+    
+    // Group products by name (aggregate quantities)
+    const productsByName = {};
+    productsAtLocation.forEach(p => {
+      if (!productsByName[p.product_name]) {
+        productsByName[p.product_name] = { ...p, total_count: 0, instances: [] };
+      }
+      productsByName[p.product_name].total_count += p.product_count;
+      productsByName[p.product_name].instances.push(p);
+    });
     
     const box = document.createElement('div');
     box.style.position = 'absolute';
@@ -828,81 +896,128 @@ function renderResourceMap(enableClickable = true) {
     box.style.top = loc.y + 'px';
     box.style.width = loc.width + 'px';
     box.style.height = loc.height + 'px';
-    box.style.border = '2px solid #888888';
-    box.style.backgroundColor = 'rgba(136,136,136,0.08)';
+    box.style.border = '2px solid #0066cc';
+    box.style.backgroundColor = '#f0f7ff';
     box.style.borderRadius = '4px';
-    box.style.cursor = 'default';
     box.style.display = 'flex';
     box.style.flexDirection = 'column';
-    box.style.alignItems = 'center';
-    box.style.justifyContent = 'center';
-    box.style.fontSize = '12px';
-    box.style.fontWeight = 'bold';
-    box.style.color = '#666666';
-    box.style.userSelect = 'none';
-    box.style.transition = 'all 0.2s';
     box.style.padding = '0.5rem';
     box.style.boxSizing = 'border-box';
     box.style.overflow = 'hidden';
     
-    // Location name with icon
-    const nameDiv = document.createElement('div');
-    nameDiv.style.marginBottom = '0.25rem';
-    nameDiv.innerHTML = '<i data-lucide="map-pin" style="width:1em;height:1em;vertical-align:middle;display:inline;margin-right:0.25rem;"></i><strong>' + esc(loc.name) + '</strong>';
+    // Location header
+    const header = document.createElement('div');
+    header.style.fontWeight = 'bold';
+    header.style.fontSize = '11px';
+    header.style.marginBottom = '0.5rem';
+    header.style.paddingBottom = '0.3rem';
+    header.style.borderBottom = '1px solid #0066cc';
+    header.style.color = '#0066cc';
+    header.innerHTML = '<i data-lucide="map-pin" style="width:0.9em;height:0.9em;vertical-align:middle;display:inline;margin-right:0.25rem;"></i>' + esc(loc.name);
+    box.appendChild(header);
     
-    // Content preview (truncated with popup option if needed)
-    const contentDiv = document.createElement('div');
-    contentDiv.style.fontSize = '10px';
-    contentDiv.style.textAlign = 'center';
-    contentDiv.style.maxHeight = loc.height - 40 + 'px';
-    contentDiv.style.overflow = 'hidden';
-    contentDiv.style.display = 'flex';
-    contentDiv.style.flexDirection = 'column';
-    contentDiv.style.justifyContent = 'center';
-    contentDiv.style.flex = 1;
+    // Products container (scrollable)
+    const productsContainer = document.createElement('div');
+    productsContainer.style.flex = '1';
+    productsContainer.style.overflowY = 'auto';
+    productsContainer.style.display = 'flex';
+    productsContainer.style.flexDirection = 'column';
+    productsContainer.style.gap = '0.3rem';
     
-    // Check if content fits
-    const contentFitsInBox = contentText.length < 30 && productsAtLocation.length <= 2;
-    
-    if (contentFitsInBox) {
-      contentDiv.textContent = contentText;
+    if (Object.keys(productsByName).length === 0) {
+      const emptyMsg = document.createElement('div');
+      emptyMsg.style.color = '#999';
+      emptyMsg.style.fontSize = '10px';
+      emptyMsg.style.textAlign = 'center';
+      emptyMsg.textContent = 'pusta';
+      productsContainer.appendChild(emptyMsg);
     } else {
-      // Show truncated content with "Zajrzyj" button
-      contentDiv.innerHTML = '<div style="margin-bottom:0.25rem;">' + 
-        (productsAtLocation.length > 0 ? productsAtLocation.length + ' produkt' + (productsAtLocation.length !== 1 ? 'ów' : '') : 'pusta') + 
-        '</div>';
-      if (productsAtLocation.length > 0) {
-        const btnZajrzyj = document.createElement('button');
-        btnZajrzyj.className = 'btn btn-secondary btn-xs';
-        btnZajrzyj.style.padding = '2px 4px';
-        btnZajrzyj.title = 'Pokaż produkty';
-        btnZajrzyj.innerHTML = '<i data-lucide="eye" style="width:14px;height:14px;"></i>';
-        btnZajrzyj.onclick = (e) => {
+      Object.entries(productsByName).forEach(([prodName, prodData]) => {
+        const tile = document.createElement('div');
+        tile.draggable = true;
+        tile.style.backgroundColor = 'white';
+        tile.style.border = '1px solid #ddd';
+        tile.style.borderRadius = '3px';
+        tile.style.padding = '0.4rem';
+        tile.style.fontSize = '10px';
+        tile.style.cursor = 'grab';
+        tile.style.userSelect = 'none';
+        
+        // Use first instance's ID for dragging (will update location for all with this name)
+        const firstInstance = prodData.instances[0];
+        
+        tile.ondragstart = (e) => {
           e.stopPropagation();
-          showLocationContentsPopup(loc.name, productsAtLocation);
+          e.dataTransfer.effectAllowed = 'move';
+          // Store both product ID and product name for updating all instances
+          e.dataTransfer.setData('productId', firstInstance.product_id);
+          e.dataTransfer.setData('productName', prodName);
+          tile.style.opacity = '0.5';
         };
-        contentDiv.appendChild(btnZajrzyj);
+        
+        tile.ondragend = (e) => {
+          tile.style.opacity = '1';
+        };
+        
+        tile.innerHTML = `
+          <div style="font-weight:bold;margin-bottom:0.2rem;">${esc(prodName)}</div>
+          <div style="color:#666;">${prodData.total_count} szt. / ${Number(prodData.instances[0].product_price).toFixed(2)} zł</div>
+        `;
+        
+        productsContainer.appendChild(tile);
+      });
+    }
+    
+    box.appendChild(productsContainer);
+    
+    // Drop zone styling
+    box.ondragover = (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      box.style.backgroundColor = '#e0f0ff';
+      box.style.borderColor = '#0044aa';
+    };
+    
+    box.ondragleave = (e) => {
+      if (e.target === box) {
+        box.style.backgroundColor = '#f0f7ff';
+        box.style.borderColor = '#0066cc';
       }
-    }
+    };
     
-    box.appendChild(nameDiv);
-    box.appendChild(contentDiv);
+    box.ondrop = (e) => {
+      e.preventDefault();
+      box.style.backgroundColor = '#f0f7ff';
+      box.style.borderColor = '#0066cc';
+      
+      const productId = e.dataTransfer.getData('productId');
+      const productName = e.dataTransfer.getData('productName');
+      if (!productId || !productName) return;
+      
+      // Update all products with this name to new location
+      const itemsToUpdate = (window.invItems || []).filter(i => i.product_name === productName && i.product_location !== loc.name);
+      
+      if (itemsToUpdate.length === 0) return;
+      
+      // Move all instances of this product
+      const movePromises = itemsToUpdate.map(item =>
+        apiFetch('/api/inventory/move', {
+          method: 'POST',
+          body: JSON.stringify({ product_id: item.product_id, new_location: loc.name, quantity: 0 })
+        }).catch(err => console.error('Move failed:', err))
+      );
+      
+      // Optimistic update
+      itemsToUpdate.forEach(item => item.product_location = loc.name);
+      renderResourceMap(enableClickable);
+      renderResourceMapUnmapped();
+      
+      // After all moves complete, reload inventory to sync all views
+      Promise.all(movePromises).then(() => {
+        setTimeout(() => loadInventory(), 300);
+      });
+    };
     
-    box.addEventListener('mouseover', () => {
-      box.style.backgroundColor = 'rgba(136,136,136,0.2)';
-      box.style.borderColor = '#666666';
-    });
-
-    box.addEventListener('mouseout', () => {
-      box.style.backgroundColor = 'rgba(136,136,136,0.08)';
-      box.style.borderColor = '#888888';
-    });
-
-    // Only add click handler if enabled (for "Przesuń towar" view)
-    if (enableClickable) {
-      box.addEventListener('click', () => handleResourceLocationClick(loc.name));
-    }
-
     canvas.appendChild(box);
   });
   reinitIcons();

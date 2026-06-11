@@ -40,7 +40,6 @@
         <!-- admin + magazynier -->
         <span class="nav-section-label hidden" id="labelInventory">Magazyn</span>
         <button class="nav-item hidden" data-view="inventory" id="navInventory"><i data-lucide="folder"></i> Zapasy</button>
-        <button class="nav-item hidden" data-view="moveItem" id="navMove"><i data-lucide="arrow-left-right"></i> Przesuń towar</button>
         <button class="nav-item hidden" data-view="deliveries" id="navDeliveries"><i data-lucide="truck"></i> Dostawy</button>
 
         <!-- admin only -->
@@ -153,15 +152,6 @@
 
   <!-- WIDOK GRAFICZNY (kanban) -->
   <div id="invBoardWrap" style="display:none;">
-    <div style="display:flex;gap:1rem;margin-bottom:1rem;align-items:center;background:var(--surface);padding:1rem;border-radius:4px;border:1px solid var(--border);">
-      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.9rem;">
-        <span style="font-weight:500;">Grupuj:</span>
-      </label>
-      <select id="invBoardGroupSelect" onchange="setInvBoardGrouping(this.value)" style="padding:0.5rem;border:1px solid var(--border);border-radius:4px;">
-        <option value="location">Po lokalizacji</option>
-        <option value="category">Po kategorii</option>
-      </select>
-    </div>
     <div id="invBoard" class="inv-board"></div>
   </div>
 
@@ -177,65 +167,6 @@
       <!-- ============================================================
            MOVE ITEM VIEW (admin + magazynier)
            ============================================================ -->
-      <div class="view" id="view-moveItem">
-        <div class="view-header">
-          <div class="view-header-left">
-            <h2>Przesuń towar</h2>
-            <span class="view-header-sub">Zmień lokalizację produktu w magazynie</span>
-          </div>
-          <div class="view-toggle">
-            <button class="view-toggle-btn active" data-mode="text" onclick="setMoveMode('text')">
-              <i data-lucide="type"></i> Tekstowy
-            </button>
-            <button class="view-toggle-btn" data-mode="graphic" onclick="setMoveMode('graphic')" style="display:none;">
-              <i data-lucide="map"></i> Graficzny
-            </button>
-          </div>
-        </div>
-
-        <!-- TRYB TEKSTOWY -->
-        <div id="moveTextMode">
-          <div class="card" style="max-width:480px;">
-            <div style="display:flex;flex-direction:column;gap:1rem;">
-              <div class="form-group">
-                <label for="moveProductId">Produkt</label>
-                <select id="moveProductId"></select>
-              </div>
-              <div class="form-group">
-                <label for="moveLocation">Nowa lokalizacja</label>
-                <input type="text" id="moveLocation" placeholder="np. Regał C">
-              </div>
-              <div class="form-group">
-                <label for="moveQty">Ilość (0 = cały stock)</label>
-                <input type="number" id="moveQty" value="0" min="0">
-              </div>
-              <div id="moveError" class="alert alert-error" style="display:none;"></div>
-              <div id="moveSuccess" class="alert alert-success" style="display:none;"></div>
-              <button class="btn btn-primary" onclick="doMoveItem()">Przesuń</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- TRYB GRAFICZNY -->
-        <div id="moveGraphicMode" style="display:none;">
-          <div style="display:flex;gap:1rem;margin-bottom:1rem;align-items:center;">
-            <div class="form-group" style="flex:1;">
-              <label for="moveGraphicProduct">Produkt do przeniesienia</label>
-              <select id="moveGraphicProduct" onchange="updateMoveGraphicQty()"></select>
-            </div>
-            <div class="form-group">
-              <label for="moveGraphicQty">Ilość</label>
-              <input type="number" id="moveGraphicQty" value="0" min="0">
-            </div>
-          </div>
-          <div style="border:2px solid var(--border-strong);border-radius:var(--radius);background:#f8f9fa;position:relative;overflow:auto;min-height:500px;margin-bottom:1rem;">
-            <div id="moveMapCanvas" style="position:relative;width:100%;height:500px;"></div>
-          </div>
-          <div id="moveGraphicError" class="alert alert-error" style="display:none;"></div>
-          <div id="moveGraphicSuccess" class="alert alert-success" style="display:none;"></div>
-        </div>
-      </div>
-
       <!-- ============================================================
            DELIVERIES VIEW (admin + magazynier)
            ============================================================ -->
@@ -620,16 +551,21 @@
       <div class="modal-body">
         <input type="hidden" id="dsDeliveryId">
         <div class="form-group">
+          <label for="dsCurrentStatus">Obecny status</label>
+          <div id="dsCurrentStatus" style="padding:0.5rem;background:var(--background);border-radius:4px;border:1px solid var(--border);"></div>
+        </div>
+        <div class="form-group">
           <label for="dsStatus">Nowy status</label>
           <select id="dsStatus" onchange="toggleLocationField()">
-            <option value="accepted">Zaakceptowana</option>
-            <option value="rejected">Odrzucona</option>
-            <option value="completed">Zrealizowana (przyjęcie do magazynu)</option>
+            <!-- Options populated by JS based on current status and role -->
           </select>
         </div>
         <div class="form-group" id="dsLocationGroup" style="display:none;">
           <label for="dsLocation">Lokalizacja w magazynie (wymagana)</label>
-          <input type="text" id="dsLocation" placeholder="np. Chłodnia 03">
+          <select id="dsLocation">
+            <option value="">-- Wybierz lokalizację --</option>
+            <!-- Options populated by loadLocationsForDropdown() -->
+          </select>
         </div>
         <div class="form-group">
           <label for="dsNotes">Uwagi</label>
