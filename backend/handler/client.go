@@ -10,7 +10,7 @@ import (
 	"github.com/maciejmroz2002/lokalny-koszyk/backend/model"
 )
 
-// GET /api/client/profile - client views their own profile
+// GET /api/client/profile
 func GetClientProfile(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.ClaimsFromContext(r.Context())
 	if !ok {
@@ -43,7 +43,7 @@ func GetClientProfile(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(p)
 }
 
-// PUT /api/client/profile - client creates or updates their own profile
+// PUT /api/client/profile
 func UpdateClientProfile(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.ClaimsFromContext(r.Context())
 	if !ok {
@@ -74,7 +74,7 @@ func UpdateClientProfile(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(p)
 }
 
-// GET /api/clients - admin-only directory of all clients
+// GET /api/clients — admin-only
 func ListClients(w http.ResponseWriter, _ *http.Request) {
 	rows, err := db.DB.Query(
 		`SELECT u.username,
@@ -93,7 +93,7 @@ func ListClients(w http.ResponseWriter, _ *http.Request) {
 	}
 	defer rows.Close()
 
-	var profiles []model.ClientProfile
+	profiles := []model.ClientProfile{}
 	for rows.Next() {
 		var p model.ClientProfile
 		if err := rows.Scan(&p.Username, &p.FullName, &p.Phone, &p.Email, &p.Address); err != nil {

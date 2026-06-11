@@ -11,7 +11,7 @@ import (
 	"github.com/maciejmroz2002/lokalny-koszyk/backend/model"
 )
 
-// POST /api/deliveries - supplier submits a new delivery proposal
+// POST /api/deliveries — supplier submits a new delivery proposal
 func CreateDelivery(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.ClaimsFromContext(r.Context())
 	if !ok {
@@ -27,7 +27,7 @@ func CreateDelivery(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	if d.ProductName == "" || d.Quantity <= 0 || d.ProposedPrice <= 0 {
-		http.Error(w, "product_name, quantity and proposed_price are required and must be positive", http.StatusBadRequest)
+		http.Error(w, "product_name, quantity > 0, and proposed_price > 0 are required", http.StatusBadRequest)
 		return
 	}
 
@@ -43,13 +43,13 @@ func CreateDelivery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	d.SupplierUsername = claims.Username
-	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(d)
 }
 
 // GET /api/deliveries
-// Admin/magazynier see all deliveries; suppliers see only their own.
+// Admin/magazynier see all; suppliers see only their own.
 func ListDeliveries(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.ClaimsFromContext(r.Context())
 	if !ok {
@@ -61,13 +61,15 @@ func ListDeliveries(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if claims.Role == "supplier" {
 		rows, err = db.DB.Query(
-			`SELECT delivery_id, supplier_username, product_name, quantity, proposed_price, status, notes, created_at, updated_at
+			`SELECT delivery_id, supplier_username, product_name, quantity, proposed_price, status,
+			        COALESCE(notes,''), created_at, updated_at
 			 FROM deliveries WHERE supplier_username=$1 ORDER BY delivery_id DESC`,
 			claims.Username,
 		)
 	} else {
 		rows, err = db.DB.Query(
-			`SELECT delivery_id, supplier_username, product_name, quantity, proposed_price, status, notes, created_at, updated_at
+			`SELECT delivery_id, supplier_username, product_name, quantity, proposed_price, status,
+			        COALESCE(notes,''), created_at, updated_at
 			 FROM deliveries ORDER BY delivery_id DESC`,
 		)
 	}
@@ -77,16 +79,14 @@ func ListDeliveries(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var items []model.Delivery
+	items := []model.Delivery{}
 	for rows.Next() {
 		var d model.Delivery
-		var notes sql.NullString
 		if err := rows.Scan(&d.DeliveryID, &d.SupplierUsername, &d.ProductName, &d.Quantity,
-			&d.ProposedPrice, &d.Status, &notes, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			&d.ProposedPrice, &d.Status, &d.Notes, &d.CreatedAt, &d.UpdatedAt); err != nil {
 			http.Error(w, "row error", http.StatusInternalServerError)
 			return
 		}
-		d.Notes = notes.String
 		items = append(items, d)
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -94,7 +94,6 @@ func ListDeliveries(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /api/deliveries/{id}
-// Suppliers are restricted to their own deliveries; staff can see any.
 func GetDeliveryByID(w http.ResponseWriter, r *http.Request) {
 	id, ok := extractID(r.URL.Path)
 	if !ok {
@@ -108,12 +107,12 @@ func GetDeliveryByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var d model.Delivery
-	var notes sql.NullString
 	err := db.DB.QueryRow(
-		`SELECT delivery_id, supplier_username, product_name, quantity, proposed_price, status, notes, created_at, updated_at
+		`SELECT delivery_id, supplier_username, product_name, quantity, proposed_price, status,
+		        COALESCE(notes,''), created_at, updated_at
 		 FROM deliveries WHERE delivery_id=$1`, id,
 	).Scan(&d.DeliveryID, &d.SupplierUsername, &d.ProductName, &d.Quantity,
-		&d.ProposedPrice, &d.Status, &notes, &d.CreatedAt, &d.UpdatedAt)
+		&d.ProposedPrice, &d.Status, &d.Notes, &d.CreatedAt, &d.UpdatedAt)
 	if err == sql.ErrNoRows {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -122,7 +121,6 @@ func GetDeliveryByID(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
-	d.Notes = notes.String
 
 	if claims.Role == "supplier" && d.SupplierUsername != claims.Username {
 		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
@@ -134,8 +132,6 @@ func GetDeliveryByID(w http.ResponseWriter, r *http.Request) {
 }
 
 // PATCH /api/deliveries/{id}/status — admin/magazynier only
-// Allowed statuses: accepted | rejected | completed
-// When completed, location is required and items are added to inventory.
 func UpdateDeliveryStatus(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSuffix(r.URL.Path, "/status")
 	id, ok := extractID(path)
@@ -186,7 +182,7 @@ func UpdateDeliveryStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// On completion, stock the inventory at the specified location
+	// On completion, stock the inventory
 	if req.Status == "completed" {
 		if req.Location == "" {
 			http.Error(w, "location is required when completing a delivery", http.StatusBadRequest)
@@ -200,7 +196,8 @@ func UpdateDeliveryStatus(w http.ResponseWriter, r *http.Request) {
 		switch err {
 		case sql.ErrNoRows:
 			_, err = tx.Exec(
-				`INSERT INTO inventory (product_name, product_location, product_price, product_count) VALUES ($1,$2,$3,$4)`,
+				`INSERT INTO inventory (product_name, product_location, product_price, product_count, category)
+				 VALUES ($1,$2,$3,$4,'Inne')`,
 				d.ProductName, req.Location, d.ProposedPrice, d.Quantity,
 			)
 		case nil:

@@ -23,7 +23,6 @@ type contextKey string
 const ClaimsKey contextKey = "jwtClaims"
 
 // Auth returns middleware that validates a Bearer JWT and enforces role access.
-// Pass no roles to require only a valid token regardless of role.
 func Auth(allowedRoles ...string) func(http.Handler) http.Handler {
 	roleSet := make(map[string]struct{}, len(allowedRoles))
 	for _, r := range allowedRoles {
@@ -32,6 +31,12 @@ func Auth(allowedRoles ...string) func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Allow preflight
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
 			h := r.Header.Get("Authorization")
 			if h == "" || !strings.HasPrefix(h, "Bearer ") {
 				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
@@ -43,6 +48,11 @@ func Auth(allowedRoles ...string) func(http.Handler) http.Handler {
 			_, err := jwt.ParseWithClaims(raw, claims, func(t *jwt.Token) (interface{}, error) {
 				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 					return nil, fmt.Errorf("unexpected signing method")
+				}
+				// Re-read secret each time (allows hot env reload)
+				secret := os.Getenv("JWT_SECRET")
+				if secret != "" {
+					return []byte(secret), nil
 				}
 				return JWTSecret, nil
 			})

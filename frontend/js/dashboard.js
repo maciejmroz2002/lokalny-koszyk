@@ -1,19 +1,27 @@
-// dashboard.js
-// Depends on app.js (getCurrentUser, apiFetch, clearToken, getToken)
+// dashboard.js — depends on app.js
 
 let currentUser = null;
-let catalogueProducts = [];   // cache for order form selects
-let currentOrderId = null;    // for order detail modal
+let catalogueProducts = [];
+let allCategories = [];
+let currentOrderId = null;
+let invItems = [];
+let invCurrentView = 'table';
+
+// Sortowanie i filtrowanie
+let invSortBy = null;
+let invSortOrder = 'asc'; // 'asc' or 'desc'
+let invSearchTerm = '';
+let invTableGrouping = 'none'; // 'none', 'category', 'location'
+let invBoardGrouping = 'location'; // 'location', 'category'
 
 // ==============================
 // INIT
 // ==============================
 (function init() {
   currentUser = getCurrentUser();
-  if (!currentUser) { window.location.href = 'login.html'; return; }
+  if (!currentUser) { window.location.replace('login.html'); return; }
 
   setupSidebar();
-  setupHtmxCatalogueTransform();
   loadCatalogue();
 
   document.getElementById('logoutBtn').addEventListener('click', () => {
@@ -21,7 +29,6 @@ let currentOrderId = null;    // for order detail modal
     window.location.href = 'index.html';
   });
 
-  // Nav item clicks
   document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
     btn.addEventListener('click', () => switchView(btn.dataset.view));
   });
@@ -35,7 +42,7 @@ function setupSidebar() {
   document.getElementById('sidebarUsername').textContent = u.username;
   const badge = document.getElementById('sidebarRoleBadge');
   badge.textContent = roleName(u.role);
-  badge.className = `badge badge-${u.role}`;
+  badge.className = 'badge badge-' + u.role;
 
   const show = (...ids) => ids.forEach(id => {
     const el = document.getElementById(id);
@@ -43,16 +50,16 @@ function setupSidebar() {
   });
 
   if (u.role === 'admin' || u.role === 'magazynier') {
-    show('labelInventory','navInventory','navMove','navDeliveries');
+    show('labelInventory', 'navInventory', 'navMove', 'navDeliveries');
   }
   if (u.role === 'admin') {
-    show('labelAdmin','navOrdersAdmin','navSuppliers','navClients');
+    show('labelAdmin', 'navLocations', 'navCategories', 'navOrdersAdmin', 'navSuppliers', 'navClients');
   }
   if (u.role === 'supplier') {
-    show('labelSupplier','navMyDeliveries','navNewDelivery','navSupplierProfile');
+    show('labelSupplier', 'navMyDeliveries', 'navNewDelivery', 'navSupplierProfile');
   }
   if (u.role === 'client') {
-    show('labelClient','navMyOrders','navNewOrder','navClientProfile');
+    show('labelClient', 'navMyOrders', 'navNewOrder', 'navClientProfile');
   }
 }
 
@@ -69,13 +76,14 @@ function switchView(name) {
 
   const view = document.getElementById('view-' + name);
   if (view) view.classList.add('active');
-  const btn = document.querySelector(`.nav-item[data-view="${name}"]`);
+  const btn = document.querySelector('.nav-item[data-view="' + name + '"]');
   if (btn) btn.classList.add('active');
 
-  // Lazy-load data when switching
   const loaders = {
     inventory:       loadInventory,
     moveItem:        loadMoveItemSelect,
+    locations:       loadLocationsView,
+    categories:      loadCategories,
     deliveries:      loadDeliveries,
     orders:          loadAllOrders,
     suppliers:       loadSuppliers,
@@ -90,109 +98,272 @@ function switchView(name) {
 }
 
 // ==============================
-// HTMX — CATALOGUE CARD RENDER
+// CATALOGUE (dashboard widget)
 // ==============================
-function setupHtmxCatalogueTransform() {
-  document.body.addEventListener('htmx:afterRequest', e => {
-    const el = e.detail.elt;
-    if (!['catGrid'].includes(el.id)) return;
-    if (!e.detail.successful) { el.innerHTML = '<p style="color:var(--danger);padding:2rem">Błąd wczytywania katalogu.</p>'; return; }
-    try {
-      const products = JSON.parse(e.detail.xhr.responseText) || [];
-      catalogueProducts = products;
-      if (!products.length) { el.innerHTML = '<p style="color:var(--text-muted);padding:2rem">Brak produktów.</p>'; return; }
-      el.innerHTML = products.map(p => `
-        <div class="product-card">
-          <h3>${esc(p.product_name)}</h3>
-          <div class="product-meta"><span>📍 ${esc(p.product_location)}</span></div>
-          <div class="product-price">${p.product_price.toFixed(2)} zł</div>
-        </div>
-      `).join('');
-    } catch { /* ignore */ }
-  });
-}
-
 function loadCatalogue() {
-  const grid = document.getElementById('catGrid');
-  if (grid && !catalogueProducts.length) {
-    apiFetch('/api/catalogue').then(async res => {
-      catalogueProducts = (await res.json()) || [];
-      renderCatalogueGrid();
-    });
-  }
+  apiFetch('/api/catalogue').then(async res => {
+    catalogueProducts = (await res.json()) || [];
+    renderCatalogueGrid();
+  }).catch(() => {});
 }
 
 function renderCatalogueGrid() {
   const grid = document.getElementById('catGrid');
   if (!grid) return;
-  if (!catalogueProducts.length) { grid.innerHTML = '<p style="color:var(--text-muted)">Brak produktów.</p>'; return; }
+  if (!catalogueProducts.length) {
+    grid.innerHTML = '<p style="color:var(--text-muted);padding:1rem;">Brak produktów.</p>';
+    return;
+  }
   grid.innerHTML = catalogueProducts.map(p => `
     <div class="product-card">
       <h3>${esc(p.product_name)}</h3>
-      <div class="product-meta"><span>📍 ${esc(p.product_location)}</span></div>
-      <div class="product-price">${p.product_price.toFixed(2)} zł</div>
+      <div class="product-meta"><span><i data-lucide="map-pin" style="width:1em;height:1em;vertical-align:middle;"></i> ${esc(p.product_location)}</span><span>${esc(p.category || '')}</span></div>
+      <div class="product-price">${Number(p.product_price).toFixed(2)} zł</div>
     </div>
   `).join('');
+  reinitIcons();
 }
 
 // ==============================
 // INVENTORY
 // ==============================
-async function loadInventory() {
-  const tbody = document.getElementById('invBody');
-  tbody.innerHTML = loadingRow(6);
-  try {
-    const res = await apiFetch('/api/inventory');
-    const items = (await res.json()) || [];
-    if (!items.length) { tbody.innerHTML = emptyRow(6, 'Brak produktów w magazynie.'); return; }
-    tbody.innerHTML = items.map(i => `
-      <tr>
-        <td>${i.product_id}</td>
-        <td>${esc(i.product_name)}</td>
-        <td>${esc(i.product_location)}</td>
-        <td>${Number(i.product_price).toFixed(2)} zł</td>
-        <td>${i.product_count}</td>
-        <td class="td-actions">
-          <button class="btn btn-secondary btn-sm" onclick="openEditProduct(${i.product_id})">Edytuj</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteProduct(${i.product_id})">Usuń</button>
-        </td>
-      </tr>
-    `).join('');
-  } catch {
-    tbody.innerHTML = emptyRow(6, 'Błąd wczytywania.');
+function setInvView(mode) {
+  invCurrentView = mode;
+  document.querySelectorAll('#invViewToggle .view-toggle-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+  document.getElementById('invTableWrap').style.display = mode === 'table' ? '' : 'none';
+  document.getElementById('invBoardWrap').style.display = mode === 'board' ? '' : 'none';
+  document.getElementById('invMapWrap').style.display = mode === 'map' ? '' : 'none';
+  if (mode === 'board' && invItems.length) renderInvBoard(invItems);
+  if (mode === 'map' && typeof loadResourceMapView === 'function') {
+    loadResourceMapView().then(() => {
+      if (typeof renderResourceMap === 'function') renderResourceMap(false);
+    });
   }
 }
 
-function openModal(id) {
-  document.getElementById(id).classList.add('open');
-}
-function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
-}
+async function loadInventory() {
+  const tbody = document.getElementById('invBody');
+  if (tbody) tbody.innerHTML = loadingRow(6);
+  const board = document.getElementById('invBoard');
+  if (board) board.innerHTML = '<div class="inv-board-loading">Wczytywanie…</div>';
 
-// Close modals on overlay click
-document.querySelectorAll('.modal-overlay').forEach(overlay => {
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) overlay.classList.remove('open');
-  });
-});
-
-async function openEditProduct(id) {
   try {
-    const res = await apiFetch(`/api/inventory/${id}`);
-    const p = await res.json();
-    document.getElementById('modalProductTitle').textContent = 'Edytuj produkt';
-    document.getElementById('editProductId').value = p.product_id;
-    document.getElementById('mpName').value = p.product_name;
-    document.getElementById('mpLocation').value = p.product_location;
-    document.getElementById('mpPrice').value = p.product_price;
-    document.getElementById('mpCount').value = p.product_count;
-    hideEl('mpError');
-    openModal('modalAddProduct');
-  } catch { alert('Nie udało się wczytać produktu.'); }
+    const res = await apiFetch('/api/inventory');
+    invItems = (await res.json()) || [];
+    renderInventoryViews();
+  } catch {
+    if (tbody) tbody.innerHTML = emptyRow(6, 'Błąd wczytywania.');
+  }
 }
 
-// Reset modal to "add" state when opened via button
+function renderInventoryViews() {
+  updateInventoryDisplay();
+  renderInvBoard(invItems);
+  if (invCurrentView === 'map' && typeof renderResourceMap === 'function') {
+    renderResourceMap(false);  // disable clicking/moving in inventory view
+  }
+}
+
+function renderInvTable(items) {
+  const tbody = document.getElementById('invBody');
+  if (!tbody) return;
+  if (!items.length) { tbody.innerHTML = emptyRow(6, 'Brak produktów w magazynie.'); return; }
+  tbody.innerHTML = items.map(i => `
+    <tr>
+      <td>${i.product_id}</td>
+      <td>${esc(i.product_name)}</td>
+      <td>${esc(i.product_location)}</td>
+      <td>${Number(i.product_price).toFixed(2)} zł</td>
+      <td>${i.product_count}</td>
+      <td class="td-actions">
+        <button class="btn btn-secondary btn-sm" onclick="openEditProduct(${i.product_id})" title="Edytuj"><i data-lucide="edit-2"></i></button>
+        <button class="btn btn-danger btn-sm" onclick="deleteProduct(${i.product_id})" title="Usuń"><i data-lucide="trash-2"></i></button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function renderInvBoard(items) {
+  const board = document.getElementById('invBoard');
+  if (!board) return;
+
+  const groups = {};
+  items.forEach(i => {
+    let groupKey;
+    if (invBoardGrouping === 'category') {
+      // Group by category field
+      groupKey = i.category || 'Inne';
+    } else {
+      // Group by location (default)
+      groupKey = i.product_location || 'Brak lokalizacji';
+    }
+    
+    if (!groups[groupKey]) groups[groupKey] = [];
+    groups[groupKey].push(i);
+  });
+
+  if (!Object.keys(groups).length) {
+    board.innerHTML = '<div class="inv-board-empty">Brak produktów w magazynie.</div>';
+    return;
+  }
+
+  const icon = invBoardGrouping === 'category' ? 'tag' : 'map-pin';
+  
+  board.innerHTML = Object.entries(groups).map(([groupKey, products]) => `
+    <div class="inv-column"
+         data-location="${esc(groupKey)}">
+      <div class="inv-column-header">
+        <span class="inv-column-title"><i data-lucide="${icon}" style="width:1em;height:1em;vertical-align:middle;display:inline;"></i> ${esc(groupKey)}</span>
+        <span class="inv-column-count">${products.length} pozycji</span>
+      </div>
+      <div class="inv-column-body">
+        ${products.map(p => `
+          <div class="inv-card"
+               data-id="${p.product_id}"
+               data-location="${esc(p.product_location)}">
+            <div class="inv-card-name">${esc(p.product_name)}</div>
+            <div class="inv-card-meta">
+              <span class="inv-card-count">${p.product_count} szt.</span>
+              <span>${Number(p.product_price).toFixed(2)} zł</span>
+            </div>
+            <div class="inv-card-actions">
+              <button class="btn btn-secondary btn-sm" onclick="openEditProduct(${p.product_id})" title="Edytuj"><i data-lucide="edit-2"></i></button>
+              <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.product_id})" title="Usuń"><i data-lucide="trash-2"></i></button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+  reinitIcons();
+}
+
+function locationLabel(name) {
+  return '<span class="location-label"><i data-lucide="map-pin"></i><span>' + esc(name) + '</span></span>';
+}
+
+// Drag & drop
+let _dragId = null;
+
+function boardDragStart(e, id) {
+  _dragId = id;
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function boardDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.inv-column').forEach(col => col.classList.remove('drag-over'));
+}
+
+function boardDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.closest('.inv-column')?.classList.add('drag-over');
+}
+
+function boardDragLeave(e) {
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    e.currentTarget.classList.remove('drag-over');
+  }
+}
+
+async function boardDrop(e, newLocation) {
+  e.preventDefault();
+  const col = e.currentTarget.closest('.inv-column');
+  col?.classList.remove('drag-over');
+  if (!_dragId) return;
+
+  const card = document.querySelector('.inv-card[data-id="' + _dragId + '"]');
+  const oldLocation = card?.dataset.location;
+  if (!oldLocation || oldLocation === newLocation) { _dragId = null; return; }
+
+  // Optimistic update
+  const targetBody = col?.querySelector('.inv-column-body');
+  if (card && targetBody) {
+    card.dataset.location = newLocation;
+    targetBody.appendChild(card);
+    updateColumnCount(oldLocation);
+    updateColumnCount(newLocation);
+  }
+
+  try {
+    const res = await apiFetch('/api/inventory/move', {
+      method: 'POST',
+      body: JSON.stringify({ product_id: _dragId, new_location: newLocation, quantity: 0 }),
+    });
+    if (!res.ok) {
+      alert('Nie udało się przenieść: ' + await res.text());
+      loadInventory();
+    } else {
+      const item = invItems.find(i => i.product_id === _dragId);
+      if (item) item.product_location = newLocation;
+      renderInventoryViews();
+      if (typeof loadResourceMapView === 'function') loadResourceMapView({ keepSelection: true });
+    }
+  } catch {
+    alert('Błąd połączenia.');
+    loadInventory();
+  }
+  _dragId = null;
+}
+
+function updateColumnCount(location) {
+  const col = document.querySelector('.inv-column[data-location="' + CSS.escape(location) + '"]');
+  if (!col) return;
+  const count = col.querySelectorAll('.inv-card').length;
+  const el = col.querySelector('.inv-column-count');
+  if (el) el.textContent = count + ' pozycji';
+  if (count === 0) col.remove();
+}
+
+// Product modals
+// ==============================
+// PRODUCT MANAGEMENT HELPERS
+// ==============================
+
+async function populateProductFormDropdowns() {
+  // Save current selections
+  const currentLocation = document.getElementById('mpLocation')?.value || '';
+  const currentCategory = document.getElementById('mpCategory')?.value || '';
+  
+  // Load locations for dropdown
+  try {
+    const locRes = await apiFetch('/api/locations');
+    const locations = (await locRes.json()) || [];
+    const locSelect = document.getElementById('mpLocation');
+    if (locSelect) {
+      locSelect.innerHTML = '<option value="">-- Wybierz lokalizację --</option>';
+      locations.forEach(loc => {
+        const opt = document.createElement('option');
+        opt.value = loc.name || loc.location_id;
+        opt.textContent = loc.name;
+        locSelect.appendChild(opt);
+      });
+      // Restore selection
+      if (currentLocation) locSelect.value = currentLocation;
+    }
+  } catch (err) {
+    console.error('Error loading locations:', err);
+  }
+  
+  // Populate categories dropdown
+  const catSelect = document.getElementById('mpCategory');
+  if (catSelect && allCategories && allCategories.length) {
+    catSelect.innerHTML = '<option value="">-- Wybierz kategorię --</option>';
+    allCategories.forEach(cat => {
+      const opt = document.createElement('option');
+      opt.value = cat.name;
+      opt.textContent = cat.name;
+      catSelect.appendChild(opt);
+    });
+    // Restore selection
+    if (currentCategory) catSelect.value = currentCategory;
+  }
+}
+
 function openAddProductModal() {
   document.getElementById('modalProductTitle').textContent = 'Dodaj produkt';
   document.getElementById('editProductId').value = '';
@@ -200,12 +371,30 @@ function openAddProductModal() {
   document.getElementById('mpLocation').value = '';
   document.getElementById('mpPrice').value = '';
   document.getElementById('mpCount').value = '';
+  document.getElementById('mpCategory').value = '';
   hideEl('mpError');
+  populateProductFormDropdowns();
   openModal('modalAddProduct');
 }
-// Override the onclick on the button
-document.querySelector('[onclick="openModal(\'modalAddProduct\')"]')
-  && (document.querySelector('[onclick="openModal(\'modalAddProduct\')"]').onclick = openAddProductModal);
+
+async function openEditProduct(id) {
+  try {
+    const res = await apiFetch('/api/inventory/' + id);
+    if (!res.ok) throw new Error('failed');
+    const p = await res.json();
+    document.getElementById('modalProductTitle').textContent = 'Edytuj produkt';
+    document.getElementById('editProductId').value = p.product_id;
+    document.getElementById('mpName').value = p.product_name;
+    document.getElementById('mpLocation').value = p.product_location;
+    document.getElementById('mpPrice').value = p.product_price;
+    document.getElementById('mpCount').value = p.product_count;
+    document.getElementById('mpCategory').value = p.category || '';
+    hideEl('mpError');
+    await populateProductFormDropdowns();
+    openModal('modalAddProduct');
+  } catch { alert('Nie udało się wczytać produktu.'); }
+}
+
 
 async function saveProduct() {
   const id = document.getElementById('editProductId').value;
@@ -214,18 +403,18 @@ async function saveProduct() {
     product_location: document.getElementById('mpLocation').value.trim(),
     product_price:    parseFloat(document.getElementById('mpPrice').value),
     product_count:    parseInt(document.getElementById('mpCount').value),
+    category:         document.getElementById('mpCategory').value.trim() || 'Inne',
   };
   if (!body.product_name || !body.product_location || isNaN(body.product_price) || isNaN(body.product_count)) {
-    showEl('mpError', 'Uzupełnij wszystkie pola.'); return;
+    showEl('mpError', 'Uzupełnij wszystkie wymagane pola.'); return;
   }
   const method = id ? 'PUT' : 'POST';
-  const url = id ? `/api/inventory/${id}` : '/api/inventory';
+  const url = id ? '/api/inventory/' + id : '/api/inventory';
   try {
     const res = await apiFetch(url, { method, body: JSON.stringify(body) });
     if (!res.ok) { showEl('mpError', await res.text()); return; }
     closeModal('modalAddProduct');
     loadInventory();
-    // refresh catalogue cache
     catalogueProducts = [];
     loadCatalogue();
   } catch { showEl('mpError', 'Błąd połączenia.'); }
@@ -233,8 +422,14 @@ async function saveProduct() {
 
 async function deleteProduct(id) {
   if (!confirm('Usunąć produkt?')) return;
-  await apiFetch(`/api/inventory/${id}`, { method: 'DELETE' });
-  loadInventory();
+  const res = await apiFetch('/api/inventory/' + id, { method: 'DELETE' });
+  if (res.ok || res.status === 204) {
+    loadInventory();
+    catalogueProducts = [];
+    loadCatalogue();
+  } else {
+    alert('Błąd usuwania: ' + await res.text());
+  }
 }
 
 // ==============================
@@ -242,11 +437,12 @@ async function deleteProduct(id) {
 // ==============================
 async function loadMoveItemSelect() {
   const sel = document.getElementById('moveProductId');
+  if (!sel) return;
   sel.innerHTML = '<option>Wczytywanie…</option>';
   const res = await apiFetch('/api/inventory');
   const items = (await res.json()) || [];
   sel.innerHTML = items.map(i =>
-    `<option value="${i.product_id}">${esc(i.product_name)} (${esc(i.product_location)})</option>`
+    '<option value="' + i.product_id + '">' + esc(i.product_name) + ' (' + esc(i.product_location) + ') — ' + i.product_count + ' szt.</option>'
   ).join('');
 }
 
@@ -261,8 +457,9 @@ async function doMoveItem() {
   try {
     const res = await apiFetch('/api/inventory/move', { method: 'POST', body: JSON.stringify(body) });
     if (!res.ok) { showEl('moveError', await res.text()); return; }
-    showEl('moveSuccess', 'Towar przesunięty.');
+    showEl('moveSuccess', 'Towar przesunięty pomyślnie.');
     document.getElementById('moveLocation').value = '';
+    loadMoveItemSelect();
   } catch { showEl('moveError', 'Błąd połączenia.'); }
 }
 
@@ -271,6 +468,7 @@ async function doMoveItem() {
 // ==============================
 async function loadDeliveries() {
   const tbody = document.getElementById('deliveriesBody');
+  if (!tbody) return;
   tbody.innerHTML = loadingRow(7);
   try {
     const res = await apiFetch('/api/deliveries');
@@ -285,13 +483,11 @@ async function loadDeliveries() {
         <td>${Number(d.proposed_price).toFixed(2)} zł</td>
         <td><span class="status-badge status-${d.status}">${statusLabel(d.status)}</span></td>
         <td class="td-actions">
-          ${d.status === 'pending' ? `<button class="btn btn-primary btn-sm" onclick="openDeliveryStatus(${d.delivery_id})">Zmień status</button>` : '—'}
+          ${d.status === 'pending' ? '<button class="btn btn-primary btn-sm" onclick="openDeliveryStatus(' + d.delivery_id + ')">Zmień status</button>' : '—'}
         </td>
       </tr>
     `).join('');
-  } catch {
-    tbody.innerHTML = emptyRow(7, 'Błąd wczytywania.');
-  }
+  } catch { tbody.innerHTML = emptyRow(7, 'Błąd wczytywania.'); }
 }
 
 function openDeliveryStatus(id) {
@@ -312,21 +508,19 @@ function toggleLocationField() {
 async function saveDeliveryStatus() {
   const id = document.getElementById('dsDeliveryId').value;
   const body = {
-    status: document.getElementById('dsStatus').value,
-    notes:  document.getElementById('dsNotes').value,
+    status:   document.getElementById('dsStatus').value,
+    notes:    document.getElementById('dsNotes').value,
     location: document.getElementById('dsLocation').value.trim(),
   };
-  if (body.status === 'completed' && !body.location) { showEl('dsError', 'Lokalizacja jest wymagana przy realizacji.'); return; }
+  if (body.status === 'completed' && !body.location) {
+    showEl('dsError', 'Lokalizacja jest wymagana przy realizacji.'); return;
+  }
   try {
-    const res = await apiFetch(`/api/deliveries/${id}/status`, { method: 'PATCH', body: JSON.stringify(body) });
+    const res = await apiFetch('/api/deliveries/' + id + '/status', { method: 'PATCH', body: JSON.stringify(body) });
     if (!res.ok) { showEl('dsError', await res.text()); return; }
     closeModal('modalDeliveryStatus');
     loadDeliveries();
-    // Refresh inventory if completed
-    if (body.status === 'completed') {
-      catalogueProducts = [];
-      loadCatalogue();
-    }
+    if (body.status === 'completed') { catalogueProducts = []; loadCatalogue(); }
   } catch { showEl('dsError', 'Błąd połączenia.'); }
 }
 
@@ -335,9 +529,10 @@ async function saveDeliveryStatus() {
 // ==============================
 async function loadAllOrders() {
   const tbody = document.getElementById('ordersBody');
+  if (!tbody) return;
   tbody.innerHTML = loadingRow(6);
-  const status = document.getElementById('orderStatusFilter').value;
-  const qs = status ? `?status=${status}` : '';
+  const status = document.getElementById('orderStatusFilter')?.value || '';
+  const qs = status ? '?status=' + status : '';
   try {
     const res = await apiFetch('/api/orders' + qs);
     const orders = (await res.json()) || [];
@@ -352,9 +547,7 @@ async function loadAllOrders() {
         <td><button class="btn btn-secondary btn-sm" onclick="openOrderDetail(${o.order_id}, 'staff')">Szczegóły</button></td>
       </tr>
     `).join('');
-  } catch {
-    tbody.innerHTML = emptyRow(6, 'Błąd wczytywania.');
-  }
+  } catch { tbody.innerHTML = emptyRow(6, 'Błąd wczytywania.'); }
 }
 
 // ==============================
@@ -362,6 +555,7 @@ async function loadAllOrders() {
 // ==============================
 async function loadSuppliers() {
   const tbody = document.getElementById('suppliersBody');
+  if (!tbody) return;
   tbody.innerHTML = loadingRow(4);
   try {
     const res = await apiFetch('/api/suppliers');
@@ -383,6 +577,7 @@ async function loadSuppliers() {
 // ==============================
 async function loadClients() {
   const tbody = document.getElementById('clientsBody');
+  if (!tbody) return;
   tbody.innerHTML = loadingRow(5);
   try {
     const res = await apiFetch('/api/clients');
@@ -405,6 +600,7 @@ async function loadClients() {
 // ==============================
 async function loadMyDeliveries() {
   const tbody = document.getElementById('myDeliveriesBody');
+  if (!tbody) return;
   tbody.innerHTML = loadingRow(7);
   try {
     const res = await apiFetch('/api/deliveries');
@@ -435,8 +631,8 @@ async function doCreateDelivery() {
     proposed_price: parseFloat(document.getElementById('ndPrice').value),
     notes:          document.getElementById('ndNotes').value.trim(),
   };
-  if (!body.product_name || isNaN(body.quantity) || isNaN(body.proposed_price)) {
-    showEl('ndError', 'Uzupełnij wymagane pola.'); return;
+  if (!body.product_name || isNaN(body.quantity) || body.quantity < 1 || isNaN(body.proposed_price) || body.proposed_price <= 0) {
+    showEl('ndError', 'Uzupełnij wymagane pola poprawnie.'); return;
   }
   try {
     const res = await apiFetch('/api/deliveries', { method: 'POST', body: JSON.stringify(body) });
@@ -460,7 +656,6 @@ async function loadSupplierProfile() {
     document.getElementById('spCompany').textContent = p.company_name || '—';
     document.getElementById('spPhone').textContent = p.phone || '—';
     document.getElementById('spEmail').textContent = p.email || '—';
-    // pre-fill edit fields
     document.getElementById('spEditCompany').value = p.company_name || '';
     document.getElementById('spEditPhone').value = p.phone || '';
     document.getElementById('spEditEmail').value = p.email || '';
@@ -534,6 +729,7 @@ async function saveClientProfile() {
 // ==============================
 async function loadMyOrders() {
   const tbody = document.getElementById('myOrdersBody');
+  if (!tbody) return;
   tbody.innerHTML = loadingRow(6);
   try {
     const res = await apiFetch('/api/orders');
@@ -558,20 +754,19 @@ async function loadMyOrders() {
 let orderItemCount = 0;
 
 function initNewOrder() {
-  // Prefill address from profile
   apiFetch('/api/client/profile').then(async r => {
     const p = await r.json();
-    if (p.address) document.getElementById('noAddress').value = p.address;
+    const addr = document.getElementById('noAddress');
+    if (addr && p.address) addr.value = p.address;
   }).catch(() => {});
 
-  // Load catalogue for selects
   if (!catalogueProducts.length) {
     apiFetch('/api/catalogue').then(async r => {
       catalogueProducts = (await r.json()) || [];
       renderCatalogueGrid();
     });
   }
-  // Reset
+
   document.getElementById('orderItemsList').innerHTML = '';
   document.getElementById('noNotes').value = '';
   document.getElementById('orderTotal').textContent = '';
@@ -584,7 +779,7 @@ function addOrderItemRow() {
   const idx = orderItemCount++;
   const row = document.createElement('div');
   row.className = 'order-item-row';
-  row.id = `oir-${idx}`;
+  row.id = 'oir-' + idx;
   row.innerHTML = `
     <div class="form-group" style="margin:0;">
       <select id="oiProd-${idx}" onchange="recalcOrderTotal()">
@@ -593,7 +788,7 @@ function addOrderItemRow() {
       </select>
     </div>
     <div class="form-group" style="margin:0;">
-      <input type="number" id="oiQty-${idx}" min="1" value="1" placeholder="Ilość" oninput="recalcOrderTotal()">
+      <input type="number" id="oiQty-${idx}" min="1" value="1" oninput="recalcOrderTotal()">
     </div>
     <button class="btn btn-ghost btn-icon" onclick="removeOrderItemRow(${idx})" title="Usuń">✕</button>
   `;
@@ -601,7 +796,7 @@ function addOrderItemRow() {
 }
 
 function removeOrderItemRow(idx) {
-  document.getElementById(`oir-${idx}`)?.remove();
+  document.getElementById('oir-' + idx)?.remove();
   recalcOrderTotal();
 }
 
@@ -616,7 +811,7 @@ function recalcOrderTotal() {
       total += price * (parseInt(qty.value) || 0);
     }
   });
-  document.getElementById('orderTotal').textContent = total > 0 ? `Łączna kwota: ${total.toFixed(2)} zł` : '';
+  document.getElementById('orderTotal').textContent = total > 0 ? 'Łączna kwota: ' + total.toFixed(2) + ' zł' : '';
 }
 
 async function doCreateOrder() {
@@ -636,17 +831,13 @@ async function doCreateOrder() {
     items.push({ product_id: productId, quantity });
   });
 
-  if (!valid || !items.length) { showEl('noError', 'Dodaj przynajmniej jeden produkt i uzupełnij pola.'); return; }
+  if (!valid || !items.length) { showEl('noError', 'Dodaj przynajmniej jeden produkt poprawnie.'); return; }
 
-  const body = {
-    delivery_address: address,
-    notes: document.getElementById('noNotes').value.trim(),
-    items,
-  };
+  const body = { delivery_address: address, notes: document.getElementById('noNotes').value.trim(), items };
   try {
     const res = await apiFetch('/api/orders', { method: 'POST', body: JSON.stringify(body) });
     if (!res.ok) { showEl('noError', await res.text()); return; }
-    showEl('noSuccess', 'Zamówienie złożone!');
+    showEl('noSuccess', 'Zamówienie złożone pomyślnie!');
     setTimeout(() => switchView('myOrders'), 1200);
   } catch { showEl('noError', 'Błąd połączenia.'); }
 }
@@ -656,7 +847,7 @@ async function doCreateOrder() {
 // ==============================
 async function openOrderDetail(id, mode) {
   currentOrderId = id;
-  document.getElementById('odTitle').textContent = `Zamówienie #${id}`;
+  document.getElementById('odTitle').textContent = 'Zamówienie #' + id;
   document.getElementById('odMeta').innerHTML = '<span style="color:var(--text-muted)">Wczytywanie…</span>';
   document.getElementById('odItemsBody').innerHTML = '';
   document.getElementById('odStatusSection').style.display = 'none';
@@ -665,7 +856,8 @@ async function openOrderDetail(id, mode) {
   openModal('modalOrderDetail');
 
   try {
-    const res = await apiFetch(`/api/orders/${id}`);
+    const res = await apiFetch('/api/orders/' + id);
+    if (!res.ok) throw new Error(await res.text());
     const o = await res.json();
 
     document.getElementById('odMeta').innerHTML = `
@@ -673,7 +865,7 @@ async function openOrderDetail(id, mode) {
       <div class="profile-field"><label>Klient</label><span>${esc(o.client_username)}</span></div>
       <div class="profile-field"><label>Adres dostawy</label><span>${esc(o.delivery_address)}</span></div>
       <div class="profile-field"><label>Łączna kwota</label><span>${Number(o.total_price).toFixed(2)} zł</span></div>
-      ${o.notes ? `<div class="profile-field" style="grid-column:1/-1"><label>Uwagi</label><span>${esc(o.notes)}</span></div>` : ''}
+      ${o.notes ? '<div class="profile-field" style="grid-column:1/-1"><label>Uwagi</label><span>' + esc(o.notes) + '</span></div>' : ''}
     `;
 
     const items = o.items || [];
@@ -686,26 +878,27 @@ async function openOrderDetail(id, mode) {
             <td>${(it.quantity * it.unit_price).toFixed(2)} zł</td>
           </tr>
         `).join('')
-      : `<tr class="empty-row"><td colspan="4">Brak pozycji.</td></tr>`;
+      : '<tr class="empty-row"><td colspan="4">Brak pozycji.</td></tr>';
 
-    // Status controls
     if (mode === 'staff') {
-      const cancellable = o.status === 'pending' || o.status === 'confirmed';
-      const progressable = ['pending','confirmed','shipped'].includes(o.status);
-      if (cancellable || progressable) {
+      const transitions = {
+        pending:   ['confirmed', 'cancelled'],
+        confirmed: ['shipped', 'cancelled'],
+        shipped:   ['delivered'],
+      };
+      const opts = transitions[o.status] || [];
+      if (opts.length) {
         document.getElementById('odStatusSection').style.display = '';
-        // Limit options to valid transitions
         const sel = document.getElementById('odNewStatus');
-        const transitions = { pending: ['confirmed','cancelled'], confirmed: ['shipped','cancelled'], shipped: ['delivered'] };
-        const opts = transitions[o.status] || [];
-        sel.innerHTML = opts.map(s => `<option value="${s}">${statusLabel(s)}</option>`).join('');
+        sel.innerHTML = opts.map(s => '<option value="' + s + '">' + statusLabel(s) + '</option>').join('');
       }
     }
     if (mode === 'client') {
-      const cancellable = o.status === 'pending' || o.status === 'confirmed';
-      if (cancellable) document.getElementById('odClientCancelSection').style.display = '';
+      if (o.status === 'pending' || o.status === 'confirmed') {
+        document.getElementById('odClientCancelSection').style.display = '';
+      }
     }
-  } catch { showEl('odError', 'Błąd wczytywania.'); }
+  } catch (err) { showEl('odError', 'Błąd wczytywania: ' + err.message); }
 }
 
 async function saveOrderStatus() {
@@ -715,12 +908,11 @@ async function saveOrderStatus() {
     notes:  document.getElementById('odStatusNote').value.trim(),
   };
   try {
-    const res = await apiFetch(`/api/orders/${currentOrderId}/status`, { method: 'PATCH', body: JSON.stringify(body) });
+    const res = await apiFetch('/api/orders/' + currentOrderId + '/status', { method: 'PATCH', body: JSON.stringify(body) });
     if (!res.ok) { showEl('odError', await res.text()); return; }
     closeModal('modalOrderDetail');
-    // Refresh whichever list is active
-    if (document.getElementById('view-orders').classList.contains('active')) loadAllOrders();
-    if (document.getElementById('view-myOrders').classList.contains('active')) loadMyOrders();
+    if (document.getElementById('view-orders')?.classList.contains('active')) loadAllOrders();
+    if (document.getElementById('view-myOrders')?.classList.contains('active')) loadMyOrders();
   } catch { showEl('odError', 'Błąd połączenia.'); }
 }
 
@@ -728,7 +920,7 @@ async function doCancelMyOrder() {
   if (!confirm('Anulować zamówienie?')) return;
   hideEl('odError');
   try {
-    const res = await apiFetch(`/api/orders/${currentOrderId}/status`, {
+    const res = await apiFetch('/api/orders/' + currentOrderId + '/status', {
       method: 'PATCH',
       body: JSON.stringify({ status: 'cancelled', notes: '' })
     });
@@ -739,18 +931,44 @@ async function doCancelMyOrder() {
 }
 
 // ==============================
-// UTILITIES
+// MODAL HELPERS
 // ==============================
-function esc(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.style.display = 'flex';
+    if (el.classList) el.classList.add('open');
+  }
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.style.display = 'none';
+    if (el.classList) el.classList.remove('open');
+  }
 }
 
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay) overlay.style.display = 'none';
+    });
+  });
+
+  // Fix the "add product" button onclick
+  const addBtn = document.querySelector('[onclick="openModal(\'modalAddProduct\')"]');
+  if (addBtn) addBtn.setAttribute('onclick', 'openAddProductModal()');
+});
+
+// ==============================
+// UTILITIES
+// ==============================
 function loadingRow(cols) {
-  return `<tr class="loading-row"><td colspan="${cols}">Wczytywanie…</td></tr>`;
+  return '<tr class="loading-row"><td colspan="' + cols + '">Wczytywanie…</td></tr>';
 }
 
 function emptyRow(cols, msg) {
-  return `<tr class="empty-row"><td colspan="${cols}">${msg}</td></tr>`;
+  return '<tr class="empty-row"><td colspan="' + cols + '">' + msg + '</td></tr>';
 }
 
 function showEl(id, msg) {
@@ -778,4 +996,263 @@ function statusLabel(s) {
     delivered: 'Dostarczone', cancelled: 'Anulowane',
   };
   return m[s] || s;
+}
+
+// ==============================
+// INVENTORY TABLE: SORTING, FILTERING, GROUPING
+// ==============================
+
+function sortInventory(field) {
+  // Toggle sort order if clicking same field, otherwise start with asc
+  if (invSortBy === field) {
+    invSortOrder = invSortOrder === 'asc' ? 'desc' : 'asc';
+  } else {
+    invSortBy = field;
+    invSortOrder = 'asc';
+  }
+  updateInventoryDisplay();
+}
+
+function setInvTableGrouping(value) {
+  invTableGrouping = value || 'none';
+  updateInventoryDisplay();
+}
+
+function setInvBoardGrouping(value) {
+  invBoardGrouping = value || 'location';
+  renderInvBoard(invItems);
+}
+
+function updateInventoryDisplay() {
+  // Get search input
+  const searchInput = document.getElementById('invSearchInput');
+  if (searchInput) invSearchTerm = searchInput.value.toLowerCase();
+
+  // Filter items
+  let filtered = invItems.filter(item => {
+    if (!invSearchTerm) return true;
+    return (item.product_id + '').includes(invSearchTerm) ||
+           (item.product_name || '').toLowerCase().includes(invSearchTerm) ||
+           (item.product_location || '').toLowerCase().includes(invSearchTerm);
+  });
+
+  // Sort items
+  if (invSortBy) {
+    filtered.sort((a, b) => {
+      let aVal = a[invSortBy];
+      let bVal = b[invSortBy];
+
+      // Handle numeric values
+      if (typeof aVal === 'string' && !isNaN(aVal)) aVal = parseFloat(aVal);
+      if (typeof bVal === 'string' && !isNaN(bVal)) bVal = parseFloat(bVal);
+
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+
+      if (aVal < bVal) return invSortOrder === 'asc' ? -1 : 1;
+      if (aVal > bVal) return invSortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+
+  // Render table based on grouping setting
+  if (invTableGrouping === 'none') {
+    renderInvTable(filtered);
+  } else {
+    renderInvTableGrouped(filtered, invTableGrouping);
+  }
+  updateSortArrows();
+}
+
+function updateSortArrows() {
+  // Clear all arrows
+  ['ID', 'Name', 'Loc', 'Price', 'Count'].forEach(name => {
+    const arrow = document.getElementById('arrow' + name);
+    if (arrow) arrow.textContent = '';
+  });
+
+  // Show current sort arrow
+  if (invSortBy) {
+    const fieldMap = {
+      product_id: 'ID',
+      product_name: 'Name',
+      product_location: 'Loc',
+      product_price: 'Price',
+      product_count: 'Count'
+    };
+    const arrowName = fieldMap[invSortBy];
+    if (arrowName) {
+      const arrow = document.getElementById('arrow' + arrowName);
+      if (arrow) arrow.textContent = invSortOrder === 'asc' ? ' ↑' : ' ↓';
+    }
+  }
+}
+
+function renderInvTableGrouped(items, groupBy) {
+  const tbody = document.getElementById('invBody');
+  if (!tbody) return;
+  if (!items.length) { tbody.innerHTML = emptyRow(6, 'Brak produktów spełniających kryteria.'); return; }
+
+  // Group by location or category
+  const groups = {};
+  items.forEach(i => {
+    let groupKey;
+    if (groupBy === 'category') {
+      // Group by category field
+      groupKey = i.category || 'Inne';
+    } else {
+      // Group by location
+      groupKey = i.product_location || 'Brak lokalizacji';
+    }
+    
+    if (!groups[groupKey]) groups[groupKey] = [];
+    groups[groupKey].push(i);
+  });
+
+  let html = '';
+  Object.entries(groups).forEach(([groupKey, products]) => {
+    // Group header row
+    const icon = groupBy === 'category' ? 'tag' : 'map-pin';
+    html += `
+      <tr style="background-color:var(--surface-alt,#f5f5f5);font-weight:bold;">
+        <td colspan="6"><i data-lucide="${icon}" style="width:1em;height:1em;vertical-align:middle;display:inline;margin-right:0.5rem;"></i>${esc(groupKey)} (${products.length})</td>
+      </tr>
+    `;
+    // Product rows
+    html += products.map(i => `
+      <tr>
+        <td>${i.product_id}</td>
+        <td>${esc(i.product_name)}</td>
+        <td>${esc(i.product_location)}</td>
+        <td>${Number(i.product_price).toFixed(2)} zł</td>
+        <td>${i.product_count}</td>
+        <td class="td-actions">
+          <button class="btn btn-secondary btn-sm" onclick="openEditProduct(${i.product_id})" title="Edytuj"><i data-lucide="edit-2"></i></button>
+          <button class="btn btn-danger btn-sm" onclick="deleteProduct(${i.product_id})" title="Usuń"><i data-lucide="trash-2"></i></button>
+        </td>
+      </tr>
+    `).join('');
+  });
+
+  tbody.innerHTML = html;
+  reinitIcons();
+}
+
+// Hook into input to trigger filtering on every keystroke
+(function() {
+  setTimeout(() => {
+    const searchInput = document.getElementById('invSearchInput');
+    if (searchInput) {
+      searchInput.addEventListener('input', updateInventoryDisplay);
+    }
+  }, 100);
+})();
+
+// ==============================
+// CATEGORIES MANAGEMENT
+// ==============================
+
+let editingCategoryId = null;
+
+async function loadCategories() {
+  try {
+    const res = await apiFetch('/api/warehouse/categories');
+    allCategories = await res.json();
+    renderCategoriesTable();
+  } catch (err) {
+    console.error('Error loading categories:', err);
+    showEl('catError', 'Nie udało się wczytać kategorii');
+  }
+}
+
+function renderCategoriesTable() {
+  const board = document.getElementById('categoriesBoard');
+  if (!board) return;
+  
+  if (!allCategories.length) {
+    board.innerHTML = '<div style="grid-column:1/-1;padding:2rem;text-align:center;color:var(--text-muted);">Brak kategorii.</div>';
+    return;
+  }
+  
+  board.innerHTML = allCategories.map(cat => `
+    <div style="background:white;border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;display:flex;flex-direction:column;gap:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <div>
+        <h3 style="margin:0 0 0.5rem 0;font-size:1.1rem;">${esc(cat.name)}</h3>
+        <p style="margin:0;color:var(--text-muted);font-size:0.9rem;line-height:1.4;">${esc(cat.description || '(brak opisu)')}</p>
+      </div>
+      <div style="display:flex;gap:0.5rem;margin-top:auto;">
+        <button class="btn btn-secondary btn-sm" onclick="openEditCategoryModal(${cat.category_id})" style="flex:1;" title="Edytuj"><i data-lucide="edit-2" style="margin-right:0.5rem;"></i>Edytuj</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCategory(${cat.category_id})" style="flex:1;" title="Usuń"><i data-lucide="trash-2" style="margin-right:0.5rem;"></i>Usuń</button>
+      </div>
+    </div>
+  `).join('');
+  reinitIcons();
+}
+
+function openAddCategoryModal() {
+  editingCategoryId = null;
+  document.getElementById('modalCategoryTitle').textContent = 'Dodaj kategorię';
+  document.getElementById('catName').value = '';
+  document.getElementById('catDesc').value = '';
+  document.getElementById('modalCategorySubmit').textContent = 'Dodaj';
+  hideEl('modalCategoryError');
+  openModal('modalCategory');
+}
+
+function openEditCategoryModal(catId) {
+  const cat = allCategories.find(c => c.category_id === catId);
+  if (!cat) return;
+  
+  editingCategoryId = catId;
+  document.getElementById('modalCategoryTitle').textContent = 'Edytuj kategorię';
+  document.getElementById('catName').value = cat.name;
+  document.getElementById('catDesc').value = cat.description || '';
+  document.getElementById('modalCategorySubmit').textContent = 'Zapisz';
+  hideEl('modalCategoryError');
+  openModal('modalCategory');
+}
+
+function saveCategoryModal() {
+  const name = document.getElementById('catName').value.trim();
+  const description = document.getElementById('catDesc').value.trim();
+  
+  if (!name) {
+    document.getElementById('modalCategoryError').textContent = 'Nazwa kategorii jest wymagana';
+    showEl('modalCategoryError');
+    return;
+  }
+  
+  let method, url, body;
+  
+  if (editingCategoryId) {
+    // Edit existing
+    method = 'PUT';
+    url = '/api/warehouse/categories/' + editingCategoryId;
+  } else {
+    // Add new
+    method = 'POST';
+    url = '/api/warehouse/categories';
+  }
+  
+  body = JSON.stringify({ name, description });
+  
+  apiFetch(url, { method, body }).then(() => {
+    loadCategories();
+    closeModal('modalCategory');
+  }).catch(err => {
+    document.getElementById('modalCategoryError').textContent = 'Błąd: ' + err.message;
+    showEl('modalCategoryError');
+  });
+}
+
+function deleteCategory(catId) {
+  if (!confirm('Usunąć tę kategorię?')) return;
+  
+  apiFetch('/api/warehouse/categories/' + catId, {
+    method: 'DELETE'
+  }).then(() => {
+    loadCategories();
+  }).catch(err => {
+    alert('Nie udało się usunąć kategorii: ' + err.message);
+  });
 }

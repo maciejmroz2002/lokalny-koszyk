@@ -10,7 +10,7 @@ import (
 	"github.com/maciejmroz2002/lokalny-koszyk/backend/model"
 )
 
-// GET /api/supplier/profile - supplier views their own profile
+// GET /api/supplier/profile
 func GetSupplierProfile(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.ClaimsFromContext(r.Context())
 	if !ok {
@@ -25,7 +25,6 @@ func GetSupplierProfile(w http.ResponseWriter, r *http.Request) {
 		claims.Username,
 	).Scan(&p.Username, &company, &phone, &email)
 	if err == sql.ErrNoRows {
-		// Profile not filled in yet - return skeleton
 		p.Username = claims.Username
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(p)
@@ -43,7 +42,7 @@ func GetSupplierProfile(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(p)
 }
 
-// PUT /api/supplier/profile - supplier creates or updates their own profile
+// PUT /api/supplier/profile
 func UpdateSupplierProfile(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.ClaimsFromContext(r.Context())
 	if !ok {
@@ -74,7 +73,7 @@ func UpdateSupplierProfile(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(p)
 }
 
-// GET /api/suppliers - admin-only directory of all suppliers
+// GET /api/suppliers — admin-only
 func ListSuppliers(w http.ResponseWriter, _ *http.Request) {
 	rows, err := db.DB.Query(
 		`SELECT u.username,
@@ -92,7 +91,7 @@ func ListSuppliers(w http.ResponseWriter, _ *http.Request) {
 	}
 	defer rows.Close()
 
-	var profiles []model.SupplierProfile
+	profiles := []model.SupplierProfile{}
 	for rows.Next() {
 		var p model.SupplierProfile
 		if err := rows.Scan(&p.Username, &p.CompanyName, &p.Phone, &p.Email); err != nil {

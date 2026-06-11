@@ -8,25 +8,42 @@ import (
 	"github.com/maciejmroz2002/lokalny-koszyk/backend/middleware"
 )
 
+// cors adds permissive CORS headers for development
+func cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func Register() {
+	mux := http.DefaultServeMux
+
 	// Public
-	http.HandleFunc("/api/login", handler.Login)
-	http.HandleFunc("/api/register", handler.Register)
-	http.HandleFunc("/api/catalogue", handler.GetCatalogue)
-	http.HandleFunc("/api/catalogue/", handler.GetCatalogueItem)
+	mux.Handle("/api/login", cors(http.HandlerFunc(handler.Login)))
+	mux.Handle("/api/register", cors(http.HandlerFunc(handler.Register)))
+	mux.Handle("/api/catalogue", cors(http.HandlerFunc(handler.GetCatalogue)))
+	mux.Handle("/api/catalogue/", cors(http.HandlerFunc(handler.GetCatalogueItem)))
 
 	// Inventory (admin & magazynier)
 	invAuth := middleware.Auth("admin", "magazynier")
 
-	http.Handle("/api/inventory/move", invAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// /api/inventory/move must be registered BEFORE /api/inventory/ so it isn't swallowed
+	mux.Handle("/api/inventory/move", cors(invAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			handler.MoveItem(w, r)
 		} else {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-	})))
+	}))))
 
-	http.Handle("/api/inventory", invAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/inventory", cors(invAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			handler.GetAllInventory(w, r)
@@ -35,9 +52,9 @@ func Register() {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-	})))
+	}))))
 
-	http.Handle("/api/inventory/", invAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/inventory/", cors(invAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			handler.GetInventoryByID(w, r)
@@ -48,12 +65,75 @@ func Register() {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-	})))
+	}))))
+
+	// Locations (admin & magazynier)
+	mux.Handle("/api/locations", cors(invAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handler.GetAllLocations(w, r)
+		case http.MethodPost:
+			handler.CreateLocation(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))))
+
+	mux.Handle("/api/locations/", cors(invAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handler.GetLocationByID(w, r)
+		case http.MethodPut:
+			handler.UpdateLocation(w, r)
+		case http.MethodDelete:
+			handler.DeleteLocation(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))))
+
+	// Warehouse
+	mux.Handle("/api/warehouse/map", cors(invAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handler.GetWarehouseMap(w, r)
+		case http.MethodPost:
+			handler.UploadWarehouseMap(w, r)
+		case http.MethodPut:
+			handler.UpdateWarehouseMap(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))))
+
+	mux.Handle("/api/warehouse/categories", cors(invAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handler.GetCategories(w, r)
+		case http.MethodPost:
+			handler.AddCategory(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))))
+
+	mux.Handle("/api/warehouse/categories/", cors(invAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handler.GetCategory(w, r)
+		case http.MethodPut:
+			handler.UpdateCategory(w, r)
+		case http.MethodDelete:
+			handler.DeleteCategory(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))))
 
 	// Deliveries
 	deliveryAuth := middleware.Auth("admin", "magazynier", "supplier")
 
-	http.Handle("/api/deliveries", deliveryAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/deliveries", cors(deliveryAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			handler.ListDeliveries(w, r)
@@ -67,9 +147,9 @@ func Register() {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-	})))
+	}))))
 
-	http.Handle("/api/deliveries/", deliveryAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/deliveries/", cors(deliveryAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/status") {
 			if r.Method != http.MethodPatch {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -88,13 +168,13 @@ func Register() {
 		} else {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-	})))
+	}))))
 
 	// Supplier
 	supplierAuth := middleware.Auth("supplier")
 	adminAuth := middleware.Auth("admin")
 
-	http.Handle("/api/supplier/profile", supplierAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/supplier/profile", cors(supplierAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			handler.GetSupplierProfile(w, r)
@@ -103,20 +183,20 @@ func Register() {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-	})))
+	}))))
 
-	http.Handle("/api/suppliers", adminAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/suppliers", cors(adminAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			handler.ListSuppliers(w, r)
 		} else {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-	})))
+	}))))
 
 	// Client
 	clientAuth := middleware.Auth("client")
 
-	http.Handle("/api/client/profile", clientAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/client/profile", cors(clientAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			handler.GetClientProfile(w, r)
@@ -125,20 +205,20 @@ func Register() {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-	})))
+	}))))
 
-	http.Handle("/api/clients", adminAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/clients", cors(adminAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			handler.ListClients(w, r)
 		} else {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-	})))
+	}))))
 
 	// Orders
 	orderAuth := middleware.Auth("client", "admin", "magazynier")
 
-	http.Handle("/api/orders", orderAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/orders", cors(orderAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			handler.ListOrders(w, r)
@@ -152,9 +232,9 @@ func Register() {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-	})))
+	}))))
 
-	http.Handle("/api/orders/", orderAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/orders/", cors(orderAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/status") {
 			if r.Method != http.MethodPatch {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -168,5 +248,5 @@ func Register() {
 		} else {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-	})))
+	}))))
 }

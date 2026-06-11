@@ -29,10 +29,10 @@
     </div>
   </main>
 
-  <script src="js/app.js"></script>
+  <script src="js/app.js?v=20250610-auth"></script>
   <script>
     // If already logged in, redirect to dashboard
-    if (getCurrentUser()) window.location.href = 'dashboard.html';
+    if (getCurrentUser()) window.location.replace('dashboard.html');
   </script>
 </body>
 </html>

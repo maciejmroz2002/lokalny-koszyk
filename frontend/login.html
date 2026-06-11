@@ -76,9 +76,9 @@
     </div>
   </div>
 
-  <script src="js/app.js"></script>
+  <script src="js/app.js?v=20250610-auth"></script>
   <script>
-    if (getCurrentUser()) window.location.href = 'dashboard.html';
+    if (getCurrentUser()) window.location.replace('dashboard.html');
 
     function switchTab(tab) {
       document.getElementById('tabLogin').classList.toggle('active', tab === 'login');

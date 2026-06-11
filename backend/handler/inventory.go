@@ -12,7 +12,7 @@ import (
 // GET /api/inventory
 func GetAllInventory(w http.ResponseWriter, _ *http.Request) {
 	rows, err := db.DB.Query(
-		`SELECT product_id, product_name, product_location, product_price, product_count
+		`SELECT product_id, product_name, product_location, product_price, product_count, category
 		 FROM inventory ORDER BY product_id`,
 	)
 	if err != nil {
@@ -21,10 +21,10 @@ func GetAllInventory(w http.ResponseWriter, _ *http.Request) {
 	}
 	defer rows.Close()
 
-	var items []model.InventoryItem
+	items := []model.InventoryItem{}
 	for rows.Next() {
 		var it model.InventoryItem
-		if err := rows.Scan(&it.ProductID, &it.ProductName, &it.ProductLocation, &it.ProductPrice, &it.ProductCount); err != nil {
+		if err := rows.Scan(&it.ProductID, &it.ProductName, &it.ProductLocation, &it.ProductPrice, &it.ProductCount, &it.Category); err != nil {
 			http.Error(w, "row error", http.StatusInternalServerError)
 			return
 		}
@@ -43,18 +43,26 @@ func CreateInventory(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
+	if it.ProductName == "" || it.ProductLocation == "" {
+		http.Error(w, "product_name and product_location are required", http.StatusBadRequest)
+		return
+	}
+	if it.Category == "" {
+		it.Category = "Inne"
+	}
+
 	err := db.DB.QueryRow(
-		`INSERT INTO inventory (product_name, product_location, product_price, product_count)
-		 VALUES ($1,$2,$3,$4) RETURNING product_id`,
-		it.ProductName, it.ProductLocation, it.ProductPrice, it.ProductCount,
+		`INSERT INTO inventory (product_name, product_location, product_price, product_count, category)
+		 VALUES ($1,$2,$3,$4,$5) RETURNING product_id`,
+		it.ProductName, it.ProductLocation, it.ProductPrice, it.ProductCount, it.Category,
 	).Scan(&it.ProductID)
 	if err != nil {
 		http.Error(w, "insert failed", http.StatusInternalServerError)
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(it)
 }
 
@@ -68,9 +76,9 @@ func GetInventoryByID(w http.ResponseWriter, r *http.Request) {
 
 	var it model.InventoryItem
 	err := db.DB.QueryRow(
-		`SELECT product_id, product_name, product_location, product_price, product_count
+		`SELECT product_id, product_name, product_location, product_price, product_count, category
 		 FROM inventory WHERE product_id=$1`, id,
-	).Scan(&it.ProductID, &it.ProductName, &it.ProductLocation, &it.ProductPrice, &it.ProductCount)
+	).Scan(&it.ProductID, &it.ProductName, &it.ProductLocation, &it.ProductPrice, &it.ProductCount, &it.Category)
 	if err == sql.ErrNoRows {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -99,10 +107,14 @@ func UpdateInventory(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
+	if it.Category == "" {
+		it.Category = "Inne"
+	}
+
 	res, err := db.DB.Exec(
-		`UPDATE inventory SET product_name=$1, product_location=$2, product_price=$3, product_count=$4
-		 WHERE product_id=$5`,
-		it.ProductName, it.ProductLocation, it.ProductPrice, it.ProductCount, id,
+		`UPDATE inventory SET product_name=$1, product_location=$2, product_price=$3, product_count=$4, category=$5
+		 WHERE product_id=$6`,
+		it.ProductName, it.ProductLocation, it.ProductPrice, it.ProductCount, it.Category, id,
 	)
 	if err != nil {
 		http.Error(w, "update failed", http.StatusInternalServerError)
@@ -140,10 +152,12 @@ func DeleteInventory(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /api/inventory/move
-// Moves quantity units of a product to a new storage location.
-// quantity=0 (or >= total stock) moves everything in place.
-// A partial quantity splits the row, merging at the destination if it already exists.
 func MoveItem(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	var req model.MoveItemReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
@@ -176,7 +190,7 @@ func MoveItem(w http.ResponseWriter, r *http.Request) {
 
 	qty := req.Quantity
 	if qty <= 0 || qty >= src.ProductCount {
-		// Move all - simple in-place location update
+		// Move all
 		if _, err := db.DB.Exec(
 			`UPDATE inventory SET product_location=$1 WHERE product_id=$2`,
 			req.NewLocation, req.ProductID,
@@ -193,7 +207,7 @@ func MoveItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Partial move - transactional split
+	// Partial move
 	tx, err := db.DB.Begin()
 	if err != nil {
 		http.Error(w, "transaction error", http.StatusInternalServerError)
@@ -217,8 +231,9 @@ func MoveItem(w http.ResponseWriter, r *http.Request) {
 	switch err {
 	case sql.ErrNoRows:
 		_, err = tx.Exec(
-			`INSERT INTO inventory (product_name, product_location, product_price, product_count) VALUES ($1,$2,$3,$4)`,
-			src.ProductName, req.NewLocation, src.ProductPrice, qty,
+			`INSERT INTO inventory (product_name, product_location, product_price, product_count, category)
+			 SELECT product_name, $1, product_price, $2, category FROM inventory WHERE product_id=$3`,
+			req.NewLocation, qty, req.ProductID,
 		)
 	case nil:
 		_, err = tx.Exec(

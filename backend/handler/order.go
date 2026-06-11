@@ -12,9 +12,7 @@ import (
 	"github.com/maciejmroz2002/lokalny-koszyk/backend/model"
 )
 
-// POST /api/orders - client places a new order
-// Stock is decremented immediately inside a transaction.
-// If any product is out of stock the entire order rolls back with 409.
+// POST /api/orders — client places a new order
 func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.ClaimsFromContext(r.Context())
 	if !ok {
@@ -33,6 +31,10 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "order must contain at least one item", http.StatusBadRequest)
 		return
 	}
+	if o.DeliveryAddress == "" {
+		http.Error(w, "delivery_address is required", http.StatusBadRequest)
+		return
+	}
 
 	tx, err := db.DB.Begin()
 	if err != nil {
@@ -41,7 +43,6 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// Insert order header
 	err = tx.QueryRow(
 		`INSERT INTO orders (client_username, status, delivery_address, notes)
 		 VALUES ($1,'pending',$2,$3)
@@ -60,7 +61,6 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Lock inventory row and validate stock
 		var available int
 		var unitPrice float64
 		var productName string
@@ -84,7 +84,6 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Decrement stock
 		if _, err = tx.Exec(
 			`UPDATE inventory SET product_count = product_count - $1 WHERE product_id=$2`,
 			item.Quantity, item.ProductID,
@@ -93,7 +92,6 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Insert line item with price snapshot
 		var orderItemID int64
 		if err = tx.QueryRow(
 			`INSERT INTO order_items (order_id, product_id, quantity, unit_price)
@@ -131,14 +129,12 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	o.Status = "pending"
 	o.Items = savedItems
 
-	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(o)
 }
 
 // GET /api/orders
-// Clients see only their own orders.
-// Staff (admin/magazynier) see all orders, with optional ?status= filter.
 func ListOrders(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.ClaimsFromContext(r.Context())
 	if !ok {
@@ -174,7 +170,7 @@ func ListOrders(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var orders []model.Order
+	orders := []model.Order{}
 	for rows.Next() {
 		var o model.Order
 		if err := rows.Scan(&o.OrderID, &o.ClientUsername, &o.Status, &o.DeliveryAddress,
@@ -189,8 +185,6 @@ func ListOrders(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /api/orders/{id}
-// Clients are restricted to their own orders; staff can see any.
-// Response includes all line items.
 func GetOrderByID(w http.ResponseWriter, r *http.Request) {
 	id, ok := extractID(r.URL.Path)
 	if !ok {
@@ -222,7 +216,6 @@ func GetOrderByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Load line items
 	itemRows, err := db.DB.Query(
 		`SELECT oi.order_item_id, oi.product_id, i.product_name, oi.quantity, oi.unit_price
 		 FROM order_items oi
@@ -234,6 +227,8 @@ func GetOrderByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer itemRows.Close()
+
+	o.Items = []model.OrderItem{}
 	for itemRows.Next() {
 		var it model.OrderItem
 		if err := itemRows.Scan(&it.OrderItemID, &it.ProductID, &it.ProductName, &it.Quantity, &it.UnitPrice); err != nil {
@@ -248,10 +243,6 @@ func GetOrderByID(w http.ResponseWriter, r *http.Request) {
 }
 
 // PATCH /api/orders/{id}/status
-//
-// Staff valid transitions: pending -> confirmed -> shipped -> delivered
-// Both staff and clients may cancel pending or confirmed orders.
-// Stock is restored on cancellation.
 func UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSuffix(r.URL.Path, "/status")
 	id, ok := extractID(path)
@@ -305,7 +296,6 @@ func UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Restore stock when cancelling
 	if req.Status == "cancelled" {
 		if err := restoreStock(tx, id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -326,7 +316,6 @@ func UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// validateOrderTransition enforces role-based transition rules.
 func validateOrderTransition(claims *middleware.JWTClaims, o model.Order, newStatus string) error {
 	cancellable := o.Status == "pending" || o.Status == "confirmed"
 
@@ -343,7 +332,6 @@ func validateOrderTransition(claims *middleware.JWTClaims, o model.Order, newSta
 		return nil
 	}
 
-	// Staff transitions
 	if newStatus == "cancelled" {
 		if !cancellable {
 			return fmt.Errorf("cannot cancel order in status '%s'", o.Status)
@@ -361,7 +349,6 @@ func validateOrderTransition(claims *middleware.JWTClaims, o model.Order, newSta
 	return nil
 }
 
-// restoreStock increments product_count for every line item belonging to an order.
 func restoreStock(tx *sql.Tx, orderID int64) error {
 	rows, err := tx.Query(`SELECT product_id, quantity FROM order_items WHERE order_id=$1`, orderID)
 	if err != nil {

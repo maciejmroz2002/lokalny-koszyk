@@ -143,6 +143,11 @@ a { color: inherit; text-decoration: none; }
   font-size: 0.8rem;
 }
 
+.btn-xs {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.7rem;
+}
+
 .btn-icon {
   width: 36px;
   height: 36px;
@@ -690,4 +695,225 @@ tbody tr:hover td { background: var(--bg); }
   .dash-content { padding: 1rem; }
   .form-row { grid-template-columns: 1fr; }
   .profile-grid { grid-template-columns: 1fr; }
+}
+
+/* ==============================
+   PRZEŁĄCZNIK WIDOKU ZAPASÓW
+   ============================== */
+.view-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.view-toggle-btn {
+  padding: 0.45rem 0.9rem;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: background .15s, color .15s;
+  white-space: nowrap;
+}
+.view-toggle-btn + .view-toggle-btn {
+  border-left: 1px solid var(--border);
+}
+.view-toggle-btn.active {
+  background: var(--text);
+  color: var(--surface);
+}
+
+/* ==============================
+   INVENTORY BOARD (widok graficzny)
+   ============================== */
+.inv-board-info {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.inv-board {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 1rem;
+  align-items: flex-start;
+}
+
+.inv-board-loading,
+.inv-board-empty {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  padding: 2rem;
+  text-align: center;
+  width: 100%;
+}
+
+/* Kolumna lokalizacji */
+.inv-column {
+  flex: 0 0 260px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.inv-column.drag-over {
+  border-color: var(--primary, #111);
+  box-shadow: 0 0 0 2px rgba(0,0,0,.08);
+  background: var(--surface);
+}
+
+.inv-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 0.9rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.inv-column-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+.inv-column-count {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-left: 0.5rem;
+}
+
+.inv-column-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem 0.6rem;
+  min-height: 60px;
+}
+
+/* Karta produktu */
+.inv-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0.75rem 0.85rem;
+  cursor: default;
+  transition: border-color .15s, box-shadow .15s, opacity .15s;
+  user-select: none;
+}
+.inv-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
+}
+.inv-card.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+.inv-card-name {
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin-bottom: 0.35rem;
+  color: var(--text);
+}
+.inv-card-meta {
+  display: flex;
+  gap: 0.6rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+.inv-card-count { font-weight: 600; }
+.inv-card-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+@media (max-width: 768px) {
+  .inv-board {
+    flex-direction: column;
+  }
+  .inv-column {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+  .view-toggle-btn {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.65rem;
+  }
+}
+
+/* Toggle Switch for checkboxes */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.2s;
+  border-radius: 24px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.2s;
+  border-radius: 50%;
+}
+
+input:checked + .toggle-slider {
+  background-color: var(--accent);
+}
+
+input:checked + .toggle-slider:before {
+  transform: translateX(20px);
+}
+
+/* Map Canvas Sizing */
+.map-canvas {
+  min-height: 200px;
+  max-height: 100vh;
+}
+
+/* ==============================
+   CATEGORIES BOARD
+   ============================== */
+#categoriesBoard {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
 }

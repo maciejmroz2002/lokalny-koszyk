@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -16,6 +17,11 @@ import (
 
 // POST /api/login
 func Login(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	var req model.LoginReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
@@ -37,16 +43,21 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "super_secret_key"
+	}
+
 	claims := middleware.JWTClaims{
 		Username: req.Username,
 		Role:     role,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(2 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(8 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := tok.SignedString(middleware.JWTSecret)
+	signed, err := tok.SignedString([]byte(secret))
 	if err != nil {
 		http.Error(w, "failed to sign token", http.StatusInternalServerError)
 		return
@@ -56,8 +67,13 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(model.LoginResp{Token: signed})
 }
 
-// POST /api/register - public self-registration, always creates a client account
+// POST /api/register — public self-registration, always creates a client account
 func Register(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	var req model.RegisterReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
