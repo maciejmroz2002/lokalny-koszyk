@@ -6,20 +6,36 @@ import (
 	"net/http"
 
 	"github.com/maciejmroz2002/lokalny-koszyk/backend/db"
+	"github.com/maciejmroz2002/lokalny-koszyk/backend/middleware"
 	"github.com/maciejmroz2002/lokalny-koszyk/backend/model"
 )
 
-// GET /api/catalogue — public product listing without stock counts
+// GET /api/catalogue — product listing (client sees only in-stock, admin/magazynier sees all)
 func GetCatalogue(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	rows, err := db.DB.Query(
-		`SELECT product_id, product_name, product_location, product_price, category
-		 FROM inventory ORDER BY product_id`,
-	)
+	// Get user role for filtering
+	claims, _ := middleware.ClaimsFromContext(r.Context())
+	var rows *sql.Rows
+	var err error
+
+	// Admin and magazynier see all products; client/supplier see only in-stock
+	if claims.Role == "admin" || claims.Role == "magazynier" {
+		rows, err = db.DB.Query(
+			`SELECT product_id, product_name, product_location, product_price, category
+			 FROM inventory ORDER BY product_id`,
+		)
+	} else {
+		// Client/supplier: only show products with stock > 0
+		rows, err = db.DB.Query(
+			`SELECT product_id, product_name, product_location, product_price, category
+			 FROM inventory WHERE product_count > 0 ORDER BY product_id`,
+		)
+	}
+
 	if err != nil {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return

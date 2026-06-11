@@ -250,7 +250,9 @@ CREATE TABLE orders (
 
     created_at       TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
 
-    updated_at       TIMESTAMPTZ    NOT NULL DEFAULT NOW()
+    updated_at       TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+
+    inventory_deducted BOOLEAN      NOT NULL DEFAULT false
 
 );
 

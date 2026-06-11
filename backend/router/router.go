@@ -25,11 +25,17 @@ func cors(next http.Handler) http.Handler {
 func Register() {
 	mux := http.DefaultServeMux
 
+	// Auth middleware for all authenticated users
+	allAuthRoles := middleware.Auth("admin", "magazynier", "supplier", "client")
+
 	// Public
 	mux.Handle("/api/login", cors(http.HandlerFunc(handler.Login)))
 	mux.Handle("/api/register", cors(http.HandlerFunc(handler.Register)))
-	mux.Handle("/api/catalogue", cors(http.HandlerFunc(handler.GetCatalogue)))
-	mux.Handle("/api/catalogue/", cors(http.HandlerFunc(handler.GetCatalogueItem)))
+	mux.Handle("/api/users/suppliers", cors(allAuthRoles(http.HandlerFunc(handler.GetSuppliers))))
+
+	// Catalogue (authenticated users, filtered by role)
+	mux.Handle("/api/catalogue", cors(allAuthRoles(http.HandlerFunc(handler.GetCatalogue))))
+	mux.Handle("/api/catalogue/", cors(allAuthRoles(http.HandlerFunc(handler.GetCatalogueItem))))
 
 	// Inventory (admin & magazynier)
 	invAuth := middleware.Auth("admin", "magazynier")
@@ -67,26 +73,42 @@ func Register() {
 		}
 	}))))
 
-	// Locations (admin & magazynier)
-	mux.Handle("/api/locations", cors(invAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
+	// Locations (GET for all authenticated, POST/others for admin & magazynier)
+	mux.Handle("/api/locations", cors(allAuthRoles(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			// Anyone authenticated can read locations
 			handler.GetAllLocations(w, r)
-		case http.MethodPost:
+		} else if r.Method == http.MethodPost {
+			// POST requires admin or magazynier
+			claims, _ := middleware.ClaimsFromContext(r.Context())
+			if claims.Role != "admin" && claims.Role != "magazynier" {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
 			handler.CreateLocation(w, r)
-		default:
+		} else {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	}))))
 
-	mux.Handle("/api/locations/", cors(invAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Locations/{id} (GET for all authenticated, others for admin & magazynier)
+	mux.Handle("/api/locations/", cors(allAuthRoles(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
+			// Anyone authenticated can read individual location
 			handler.GetLocationByID(w, r)
-		case http.MethodPut:
-			handler.UpdateLocation(w, r)
-		case http.MethodDelete:
-			handler.DeleteLocation(w, r)
+		case http.MethodPut, http.MethodDelete:
+			// Modify requires admin/magazynier
+			claims, _ := middleware.ClaimsFromContext(r.Context())
+			if claims.Role != "admin" && claims.Role != "magazynier" {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
+			if r.Method == http.MethodPut {
+				handler.UpdateLocation(w, r)
+			} else {
+				handler.DeleteLocation(w, r)
+			}
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -149,17 +171,23 @@ func Register() {
 		}
 	}))))
 
+	// Admin/magazynier orders from supplier
+	adminMagazynierAuth := middleware.Auth("admin", "magazynier")
+	mux.Handle("/api/deliveries/supplier-order", cors(adminMagazynierAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		handler.CreateSupplierOrder(w, r)
+	}))))
+
 	mux.Handle("/api/deliveries/", cors(deliveryAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/status") {
 			if r.Method != http.MethodPatch {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 				return
 			}
-			claims, _ := middleware.ClaimsFromContext(r.Context())
-			if claims.Role != "admin" && claims.Role != "magazynier" {
-				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
-				return
-			}
+			// Let UpdateDeliveryStatus handle role/permission checks
 			handler.UpdateDeliveryStatus(w, r)
 			return
 		}

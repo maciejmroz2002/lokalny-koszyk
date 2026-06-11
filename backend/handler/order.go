@@ -78,20 +78,14 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 		}
 		if available < item.Quantity {
 			http.Error(w, fmt.Sprintf(
-				"insufficient stock for product %d (%s): have %d, want %d",
+				"Niewystarczający stan magazynu dla produktu %d (%s): dostępne %d szt., zamawiane %d szt.",
 				item.ProductID, productName, available, item.Quantity,
 			), http.StatusConflict)
 			return
 		}
 
-		if _, err = tx.Exec(
-			`UPDATE inventory SET product_count = product_count - $1 WHERE product_id=$2`,
-			item.Quantity, item.ProductID,
-		); err != nil {
-			http.Error(w, "stock update failed", http.StatusInternalServerError)
-			return
-		}
-
+		// NOTE: Don't decrease inventory here - will be done when order is sent/finalized
+		
 		var orderItemID int64
 		if err = tx.QueryRow(
 			`INSERT INTO order_items (order_id, product_id, quantity, unit_price)
@@ -264,9 +258,10 @@ func UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	var o model.Order
+	var inventoryDeducted bool
 	err := db.DB.QueryRow(
-		`SELECT order_id, client_username, status FROM orders WHERE order_id=$1`, id,
-	).Scan(&o.OrderID, &o.ClientUsername, &o.Status)
+		`SELECT order_id, client_username, status, COALESCE(inventory_deducted, false) FROM orders WHERE order_id=$1`, id,
+	).Scan(&o.OrderID, &o.ClientUsername, &o.Status, &inventoryDeducted)
 	if err == sql.ErrNoRows {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -299,6 +294,21 @@ func UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 	if req.Status == "cancelled" {
 		if err := restoreStock(tx, id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// When shipping order, decrease inventory (only if not already deducted)
+	if req.Status == "shipped" && !inventoryDeducted {
+		if err := decreaseStock(tx, id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// Mark inventory as deducted
+		if _, err = tx.Exec(
+			`UPDATE orders SET inventory_deducted=true WHERE order_id=$1`, id,
+		); err != nil {
+			http.Error(w, "failed to update inventory flag", http.StatusInternalServerError)
 			return
 		}
 	}
@@ -368,5 +378,63 @@ func restoreStock(tx *sql.Tx, orderID int64) error {
 			return fmt.Errorf("stock restore failed")
 		}
 	}
+	return nil
+}
+
+func decreaseStock(tx *sql.Tx, orderID int64) error {
+	// First, get all items for this order
+	items, err := tx.Query(`SELECT product_id, quantity FROM order_items WHERE order_id=$1`, orderID)
+	if err != nil {
+		return fmt.Errorf("items query error: %w", err)
+	}
+	defer items.Close()
+	
+	var orderItems []struct {
+		productID int64
+		qty       int
+	}
+	for items.Next() {
+		var productID int64
+		var qty int
+		if err := items.Scan(&productID, &qty); err != nil {
+			return fmt.Errorf("item scan error: %w", err)
+		}
+		orderItems = append(orderItems, struct {
+			productID int64
+			qty       int
+		}{productID, qty})
+	}
+	if err = items.Err(); err != nil {
+		return fmt.Errorf("items iteration error: %w", err)
+	}
+	
+	// Now process each item
+	for _, item := range orderItems {
+		// Get current inventory
+		var currentCount int
+		err := tx.QueryRow(`SELECT product_count FROM inventory WHERE product_id=$1`, item.productID).Scan(&currentCount)
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("product %d not found in inventory", item.productID)
+		}
+		if err != nil {
+			return fmt.Errorf("inventory query for product %d: %w", item.productID, err)
+		}
+		
+		// Decrease available amount
+		decreaseBy := item.qty
+		if decreaseBy > currentCount {
+			decreaseBy = currentCount
+		}
+		
+		if decreaseBy > 0 {
+			if _, err = tx.Exec(
+				`UPDATE inventory SET product_count = product_count - $1 WHERE product_id=$2`,
+				decreaseBy, item.productID,
+			); err != nil {
+				return fmt.Errorf("stock decrease failed for product %d: %w", item.productID, err)
+			}
+		}
+	}
+	
 	return nil
 }

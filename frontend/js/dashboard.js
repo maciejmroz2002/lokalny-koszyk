@@ -6,6 +6,8 @@ let allCategories = [];
 let currentOrderId = null;
 let invItems = [];
 let invCurrentView = 'table';
+let cartToAdd = []; // Products to add to cart on newOrder view
+let pendingCartProduct = null; // Temp storage for product being added
 
 // Sortowanie i filtrowanie
 let invSortBy = null;
@@ -119,6 +121,7 @@ function renderCatalogueGrid() {
       <h3>${esc(p.product_name)}</h3>
       <div class="product-meta"><span><i data-lucide="map-pin" style="width:1em;height:1em;vertical-align:middle;"></i> ${esc(p.product_location)}</span><span>${esc(p.category || '')}</span></div>
       <div class="product-price">${Number(p.product_price).toFixed(2)} zł</div>
+      ${currentUser?.role === 'client' ? `<button class="btn btn-primary btn-sm" onclick="addProductToCart(${p.product_id}, '${esc(p.product_name).replace(/'/g, "\\'")}', ${p.product_price})" style="margin-top:0.75rem;width:100%;"><i data-lucide="shopping-cart" style="width:1em;height:1em;vertical-align:middle;margin-right:0.25rem;"></i> Dodaj do zamówienia</button>` : ''}
     </div>
   `).join('');
   reinitIcons();
@@ -486,6 +489,12 @@ async function doMoveItem() {
 // DELIVERIES (admin + magazynier)
 // ==============================
 async function loadDeliveries() {
+  // Show/hide supplier order button based on role
+  const btn = document.getElementById('btnOrderFromSupplier');
+  if (btn) {
+    btn.style.display = (currentUser?.role === 'admin' || currentUser?.role === 'magazynier') ? 'inline-flex' : 'none';
+  }
+
   const tbody = document.getElementById('deliveriesBody');
   if (!tbody) return;
   tbody.innerHTML = loadingRow(7);
@@ -493,19 +502,28 @@ async function loadDeliveries() {
     const res = await apiFetch('/api/deliveries');
     const items = (await res.json()) || [];
     if (!items.length) { tbody.innerHTML = emptyRow(7, 'Brak dostaw.'); return; }
-    tbody.innerHTML = items.map(d => `
-      <tr>
-        <td>${d.delivery_id}</td>
-        <td>${esc(d.supplier_username)}</td>
-        <td>${esc(d.product_name)}</td>
-        <td>${d.quantity}</td>
-        <td>${Number(d.proposed_price).toFixed(2)} zł</td>
-        <td><span class="status-badge status-${d.status}">${statusLabel(d.status)}</span></td>
-        <td class="td-actions">
-          ${d.status === 'pending' ? '<button class="btn btn-primary btn-sm" onclick="openDeliveryStatus(' + d.delivery_id + ')">Zmień status</button>' : '—'}
-        </td>
-      </tr>
-    `).join('');
+    tbody.innerHTML = items.map(d => {
+      let actions = '—';
+      // Admin can change pending deliveries
+      if (d.status === 'pending' && currentUser?.role === 'admin') {
+        actions = '<button class="btn btn-primary btn-sm" onclick="openDeliveryStatus(' + d.delivery_id + ')">Zmień status</button>';
+      }
+      // Admin/magazynier can complete ready_for_pickup deliveries
+      else if (d.status === 'ready_for_pickup' && (currentUser?.role === 'admin' || currentUser?.role === 'magazynier')) {
+        actions = '<button class="btn btn-primary btn-sm" onclick="openDeliveryStatus(' + d.delivery_id + ')">Zmień status</button>';
+      }
+      return `
+        <tr>
+          <td>${d.delivery_id}</td>
+          <td>${esc(d.supplier_username)}</td>
+          <td>${esc(d.product_name)}</td>
+          <td>${d.quantity}</td>
+          <td>${Number(d.proposed_price).toFixed(2)} zł</td>
+          <td><span class="status-badge status-${d.status}">${statusLabel(d.status)}</span></td>
+          <td class="td-actions">${actions}</td>
+        </tr>
+      `;
+    }).join('');
   } catch { tbody.innerHTML = emptyRow(7, 'Błąd wczytywania.'); }
 }
 
@@ -577,14 +595,21 @@ function populateStatusOptions(currentStatus) {
     }
   }
   
-  statusSelect.innerHTML = options.map(opt => 
-    `<option value="${opt.value}">${opt.label}</option>`
-  ).join('');
+  // Add default option at the beginning
+  statusSelect.innerHTML = '<option value="">-- Wybierz status --</option>' + 
+    options.map(opt => 
+      `<option value="${opt.value}">${opt.label}</option>`
+    ).join('');
 }
 
 function toggleLocationField() {
   const status = document.getElementById('dsStatus').value;
-  document.getElementById('dsLocationGroup').style.display = status === 'completed' ? '' : 'none';
+  
+  // Show location dropdown ONLY when admin/magazynier are completing delivery
+  // Supplier never sees this field
+  const needsLocation = status === 'completed';
+  
+  document.getElementById('dsLocationGroup').style.display = needsLocation ? '' : 'none';
 }
 
 async function saveDeliveryStatus() {
@@ -600,6 +625,7 @@ async function saveDeliveryStatus() {
     return;
   }
   
+  // Validate location is required only when completing delivery (admin/magazynier)
   if (body.status === 'completed' && !body.location) {
     showEl('dsError', 'Lokalizacja jest wymagana przy realizacji.'); 
     return;
@@ -700,23 +726,31 @@ async function loadClients() {
 async function loadMyDeliveries() {
   const tbody = document.getElementById('myDeliveriesBody');
   if (!tbody) return;
-  tbody.innerHTML = loadingRow(7);
+  tbody.innerHTML = loadingRow(8);
   try {
     const res = await apiFetch('/api/deliveries');
     const items = (await res.json()) || [];
-    if (!items.length) { tbody.innerHTML = emptyRow(7, 'Brak Twoich dostaw.'); return; }
-    tbody.innerHTML = items.map(d => `
-      <tr>
-        <td>${d.delivery_id}</td>
-        <td>${esc(d.product_name)}</td>
-        <td>${d.quantity}</td>
-        <td>${Number(d.proposed_price).toFixed(2)} zł</td>
-        <td><span class="status-badge status-${d.status}">${statusLabel(d.status)}</span></td>
-        <td>${esc(d.notes || '—')}</td>
-        <td>${fmtDate(d.created_at)}</td>
-      </tr>
-    `).join('');
-  } catch { tbody.innerHTML = emptyRow(7, 'Błąd.'); }
+    if (!items.length) { tbody.innerHTML = emptyRow(8, 'Brak Twoich dostaw.'); return; }
+    tbody.innerHTML = items.map(d => {
+      let actions = '—';
+      // Only allow status change if delivery is accepted (supplier can request pickup or cancel)
+      if (d.status === 'accepted') {
+        actions = `<button class="btn btn-primary btn-sm" onclick="openDeliveryStatus(${d.delivery_id})">Zmień status</button>`;
+      }
+      return `
+        <tr>
+          <td>${d.delivery_id}</td>
+          <td>${esc(d.product_name)}</td>
+          <td>${d.quantity}</td>
+          <td>${Number(d.proposed_price).toFixed(2)} zł</td>
+          <td><span class="status-badge status-${d.status}">${statusLabel(d.status)}</span></td>
+          <td>${esc(d.notes || '—')}</td>
+          <td>${fmtDate(d.created_at)}</td>
+          <td class="td-actions">${actions}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch { tbody.innerHTML = emptyRow(8, 'Błąd.'); }
 }
 
 // ==============================
@@ -852,6 +886,53 @@ async function loadMyOrders() {
 // ==============================
 let orderItemCount = 0;
 
+function addProductToCart(productId, productName, productPrice) {
+  pendingCartProduct = { product_id: productId, product_name: productName, product_price: productPrice };
+  
+  document.getElementById('acProductName').textContent = productName;
+  document.getElementById('acProductPrice').textContent = `${Number(productPrice).toFixed(2)} zł`;
+  document.getElementById('acQuantity').value = 1;
+  
+  openModal('modalAddToCart');
+}
+
+function confirmAddToCart() {
+  if (!pendingCartProduct) return;
+  
+  const qty = parseInt(document.getElementById('acQuantity').value);
+  if (qty < 1) {
+    alert('Ilość musi być większa od 0');
+    return;
+  }
+  
+  cartToAdd.push({ product_id: pendingCartProduct.product_id, quantity: qty });
+  pendingCartProduct = null;
+  
+  // Show toast notification
+  const existingToast = document.getElementById('addToCartToast');
+  if (existingToast) existingToast.remove();
+  
+  const toast = document.createElement('div');
+  toast.id = 'addToCartToast';
+  toast.style.cssText = `
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: var(--success);
+    color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 4px;
+    z-index: 10000;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  `;
+  toast.textContent = `✓ Dodane do koszyka (${cartToAdd.length} pozycji)`;
+  document.body.appendChild(toast);
+  
+  setTimeout(() => toast.remove(), 3000);
+  closeModal('modalAddToCart');
+}
+
 function initNewOrder() {
   apiFetch('/api/client/profile').then(async r => {
     const p = await r.json();
@@ -872,6 +953,17 @@ function initNewOrder() {
   hideEl('noError'); hideEl('noSuccess');
   orderItemCount = 0;
   addOrderItemRow();
+  
+  // Add products from catalog if user clicked "Dodaj do zamówienia"
+  if (cartToAdd.length > 0) {
+    cartToAdd.forEach((prod, idx) => {
+      if (idx > 0) addOrderItemRow();
+      document.getElementById('oiProd-' + idx).value = prod.product_id;
+      document.getElementById('oiQty-' + idx).value = prod.quantity || 1;
+    });
+    recalcOrderTotal();
+    cartToAdd = [];
+  }
 }
 
 function addOrderItemRow() {
@@ -1030,6 +1122,74 @@ async function doCancelMyOrder() {
 }
 
 // ==============================
+// ORDER FROM SUPPLIER
+// ==============================
+
+async function openOrderFromSupplierModal() {
+  hideEl('ofsError');
+  
+  // Load suppliers dropdown
+  const select = document.getElementById('ofsSupplier');
+  select.innerHTML = '<option value="">-- Wybierz dostawcę --</option>';
+  
+  try {
+    const res = await apiFetch('/api/users/suppliers');
+    if (!res.ok) return;
+    const suppliers = await res.json();
+    
+    suppliers.forEach(sup => {
+      const opt = document.createElement('option');
+      opt.value = sup.username;
+      opt.textContent = sup.username;
+      select.appendChild(opt);
+    });
+  } catch (e) {
+    console.error('Failed to load suppliers:', e);
+  }
+  
+  document.getElementById('ofsProductName').value = '';
+  document.getElementById('ofsQuantity').value = 1;
+  document.getElementById('ofsPrice').value = '0.00';
+  openModal('modalOrderFromSupplier');
+}
+
+async function saveSupplierOrder() {
+  hideEl('ofsError');
+  const supplier = document.getElementById('ofsSupplier').value.trim();
+  const product = document.getElementById('ofsProductName').value.trim();
+  const quantity = parseInt(document.getElementById('ofsQuantity').value) || 0;
+  const price = parseFloat(document.getElementById('ofsPrice').value) || 0;
+  
+  if (!supplier || !product || quantity <= 0 || price <= 0) {
+    showEl('ofsError', 'Wszystkie pola są wymagane.');
+    return;
+  }
+  
+  try {
+    const res = await apiFetch('/api/deliveries/supplier-order', {
+      method: 'POST',
+      body: JSON.stringify({
+        supplier_username: supplier,
+        product_name: product,
+        quantity: quantity,
+        proposed_price: price
+      })
+    });
+    
+    if (!res.ok) {
+      showEl('ofsError', await res.text());
+      return;
+    }
+    
+    closeModal('modalOrderFromSupplier');
+    loadDeliveries();
+    showToast('Zamówienie wysłane do dostawcy!');
+  } catch (e) {
+    showEl('ofsError', 'Błąd połączenia.');
+  }
+}
+
+// ==============================
 // MODAL HELPERS
 // ==============================
 function openModal(id) {
@@ -1090,9 +1250,16 @@ function fmtDate(iso) {
 
 function statusLabel(s) {
   const m = {
-    pending: 'Oczekujące', accepted: 'Zaakceptowana', rejected: 'Odrzucona',
-    completed: 'Zrealizowana', confirmed: 'Potwierdzone', shipped: 'Wysłane',
-    delivered: 'Dostarczone', cancelled: 'Anulowane',
+    pending: 'Oczekujące', 
+    accepted: 'Zaakceptowana', 
+    rejected: 'Odrzucona',
+    ready_for_pickup: 'Wysłana',
+    completed: 'Zrealizowana', 
+    returned_to_supplier: 'Zwrot do dostawcy',
+    cancelled: 'Anulowane',
+    confirmed: 'Potwierdzone', 
+    shipped: 'Wysłane',
+    delivered: 'Dostarczone',
   };
   return m[s] || s;
 }

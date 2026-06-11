@@ -124,3 +124,26 @@ func Register(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"username": req.Username, "role": "client"})
 }
+
+// GET /api/users/suppliers — list all suppliers
+func GetSuppliers(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.DB.Query(`SELECT username FROM users WHERE role='supplier' ORDER BY username`)
+	if err != nil {
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var suppliers []map[string]string
+	for rows.Next() {
+		var username string
+		if err := rows.Scan(&username); err != nil {
+			http.Error(w, "row error", http.StatusInternalServerError)
+			return
+		}
+		suppliers = append(suppliers, map[string]string{"username": username})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(suppliers)
+}

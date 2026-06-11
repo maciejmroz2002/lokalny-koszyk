@@ -18,7 +18,6 @@
     <div class="navbar-container">
       <a href="index.html" class="navbar-logo">Lokalny Koszyk</a>
       <div class="navbar-links">
-        <a href="catalogue.html" class="navbar-link">Katalog</a>
       </div>
     </div>
   </nav>
@@ -28,8 +27,8 @@
 
     <!-- SIDEBAR -->
     <aside class="dash-sidebar">
-      <div class="dash-user">
-        <div class="dash-user-name" id="sidebarUsername">—</div>
+      <div class="dash-user" style="display:flex;align-items:center;gap:0.5rem;">
+        <div class="dash-user-name" id="sidebarUsername" style="text-align:center;flex:1;">—</div>
         <span class="badge" id="sidebarRoleBadge"></span>
       </div>
 
@@ -58,8 +57,8 @@
 
         <!-- client -->
         <span class="nav-section-label hidden" id="labelClient">Klient</span>
-        <button class="nav-item hidden" data-view="myOrders" id="navMyOrders"><i data-lucide="shopping-cart"></i> Moje zamówienia</button>
-        <button class="nav-item hidden" data-view="newOrder" id="navNewOrder"><i data-lucide="plus"></i> Nowe zamówienie</button>
+        <button class="nav-item hidden" data-view="myOrders" id="navMyOrders"><i data-lucide="history"></i> Historia zamówień</button>
+        <button class="nav-item hidden" data-view="newOrder" id="navNewOrder"><i data-lucide="shopping-cart"></i> Koszyk</button>
         <button class="nav-item hidden" data-view="clientProfile" id="navClientProfile"><i data-lucide="user"></i> Mój profil</button>
       </nav>
 
@@ -81,13 +80,7 @@
             <span class="view-header-sub">Publiczny widok dostępnych produktów</span>
           </div>
         </div>
-        <div id="catGrid" class="products-grid"
-             hx-get="/api/catalogue"
-             hx-trigger="revealed"
-             hx-target="#catGrid"
-             hx-swap="innerHTML">
-          <div class="loading-inline">Wczytywanie…</div>
-        </div>
+        <div id="catGrid" class="products-grid"></div>
       </div>
 
 <!-- ============================================================
@@ -174,6 +167,9 @@
         <div class="view-header">
           <h2>Dostawy</h2>
           <span class="view-header-sub">Zarządzaj przychodzącymi dostawami od dostawców</span>
+        </div>
+        <div style="display:flex;gap:1rem;margin-bottom:1rem;">
+          <button class="btn btn-primary" id="btnOrderFromSupplier" onclick="openOrderFromSupplierModal()" style="display:none;"><i data-lucide="plus"></i> Zamów od dostawcy</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -336,10 +332,10 @@
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>ID</th><th>Produkt</th><th>Ilość</th><th>Cena/szt.</th><th>Status</th><th>Uwagi</th><th>Data</th></tr>
+              <tr><th>ID</th><th>Produkt</th><th>Ilość</th><th>Cena/szt.</th><th>Status</th><th>Uwagi</th><th>Data</th><th>Akcje</th></tr>
             </thead>
             <tbody id="myDeliveriesBody">
-              <tr class="loading-row"><td colspan="7">Wczytywanie…</td></tr>
+              <tr class="loading-row"><td colspan="8">Wczytywanie…</td></tr>
             </tbody>
           </table>
         </div>
@@ -416,8 +412,8 @@
            ============================================================ -->
       <div class="view" id="view-myOrders">
         <div class="view-header">
-          <h2>Moje zamówienia</h2>
-          <button class="btn btn-primary" onclick="switchView('newOrder')"><i data-lucide="plus"></i> Nowe zamówienie</button>
+          <h2>Historia zamówień</h2>
+          <button class="btn btn-primary" onclick="switchView('newOrder')"><i data-lucide="shopping-cart"></i> Nowy koszyk</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -436,7 +432,7 @@
            ============================================================ -->
       <div class="view" id="view-newOrder">
         <div class="view-header">
-          <h2>Nowe zamówienie</h2>
+          <h2>Koszyk</h2>
         </div>
         <div class="card" style="max-width:600px;">
           <div style="display:flex;flex-direction:column;gap:1.25rem;">
@@ -678,6 +674,65 @@
           <button class="btn btn-danger" onclick="doCancelMyOrder()">Anuluj zamówienie</button>
         </div>
         <div id="odError" class="alert alert-error" style="display:none;margin-top:.75rem;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add to Cart Quantity Modal -->
+  <div class="modal-overlay" id="modalAddToCart">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Dodaj do zamówienia</h3>
+        <button class="modal-close" onclick="closeModal('modalAddToCart')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label id="acProductName" style="font-weight:600;color:var(--text-primary);"></label>
+          <span id="acProductPrice" style="display:block;margin-top:0.5rem;color:var(--text-muted);font-size:0.9rem;"></span>
+        </div>
+        <div class="form-group">
+          <label for="acQuantity">Ilość (sztuk)</label>
+          <input type="number" id="acQuantity" min="1" value="1" style="font-size:1.1rem;padding:0.75rem;">
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="confirmAddToCart()">Dodaj do koszyka</button>
+          <button class="btn btn-secondary" onclick="closeModal('modalAddToCart')">Anuluj</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Order from Supplier Modal -->
+  <div class="modal-overlay" id="modalOrderFromSupplier">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Zamów od dostawcy</h3>
+        <button class="modal-close" onclick="closeModal('modalOrderFromSupplier')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="ofsSupplier">Dostawca</label>
+          <select id="ofsSupplier" required>
+            <option value="">-- Wybierz dostawcę --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="ofsProductName">Nazwa produktu</label>
+          <input type="text" id="ofsProductName" placeholder="np. Mleko" required>
+        </div>
+        <div class="form-group">
+          <label for="ofsQuantity">Ilość (sztuk)</label>
+          <input type="number" id="ofsQuantity" min="1" value="1" required>
+        </div>
+        <div class="form-group">
+          <label for="ofsPrice">Cena za sztukę (PLN)</label>
+          <input type="number" id="ofsPrice" min="0.01" step="0.01" value="0.00" required>
+        </div>
+        <div id="ofsError" class="alert alert-error" style="display:none;"></div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="saveSupplierOrder()">Zamów</button>
+          <button class="btn btn-secondary" onclick="closeModal('modalOrderFromSupplier')">Anuluj</button>
+        </div>
       </div>
     </div>
   </div>

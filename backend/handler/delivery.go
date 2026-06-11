@@ -180,9 +180,9 @@ func UpdateDeliveryStatus(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if d.Status == "accepted" && (req.Status == "ready_for_pickup" || req.Status == "cancelled") {
-		// Rule 2: Only supplier can change accepted → ready_for_pickup or cancelled
+		// Rule 2: Only supplier (owner) can change accepted → ready_for_pickup or cancelled
 		if !isSupplier {
-			http.Error(w, "only supplier can change status for accepted delivery", http.StatusForbidden)
+			http.Error(w, "only supplier of this delivery can change status (your: "+claims.Username+", owner: "+d.SupplierUsername+")", http.StatusForbidden)
 			return
 		}
 	} else if d.Status == "ready_for_pickup" && (req.Status == "completed" || req.Status == "returned_to_supplier") {
@@ -257,39 +257,72 @@ func UpdateDeliveryStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-		var existingID int64
-		err = tx.QueryRow(
-			`SELECT product_id FROM inventory WHERE product_name=$1 AND product_location=$2`,
-			d.ProductName, req.Location,
-		).Scan(&existingID)
-		switch err {
-		case sql.ErrNoRows:
-			_, err = tx.Exec(
-				`INSERT INTO inventory (product_name, product_location, product_price, product_count, category)
-				 VALUES ($1,$2,$3,$4,'Inne')`,
-				d.ProductName, req.Location, d.ProposedPrice, d.Quantity,
-			)
-		case nil:
-			_, err = tx.Exec(
-				`UPDATE inventory SET product_count = product_count + $1 WHERE product_id=$2`,
-				d.Quantity, existingID,
-			)
-		}
-		if err != nil {
-			http.Error(w, "inventory update failed", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		http.Error(w, "commit failed", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"delivery_id": id,
 		"status":      req.Status,
 		"notes":       req.Notes,
 	})
+}
+
+// POST /api/deliveries/supplier-order — admin/magazynier orders from supplier
+func CreateSupplierOrder(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.ClaimsFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		SupplierUsername string  `json:"supplier_username"`
+		ProductName      string  `json:"product_name"`
+		Quantity         int     `json:"quantity"`
+		ProposedPrice    float64 `json:"proposed_price"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	if req.SupplierUsername == "" || req.ProductName == "" || req.Quantity <= 0 || req.ProposedPrice <= 0 {
+		http.Error(w, "supplier_username, product_name, quantity > 0, and proposed_price > 0 are required", http.StatusBadRequest)
+		return
+	}
+
+	// Verify supplier exists
+	var supplierRole string
+	err := db.DB.QueryRow(`SELECT role FROM users WHERE username=$1`, req.SupplierUsername).Scan(&supplierRole)
+	if err == sql.ErrNoRows {
+		http.Error(w, "supplier not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "supplier lookup error", http.StatusInternalServerError)
+		return
+	}
+	if supplierRole != "supplier" {
+		http.Error(w, "user is not a supplier", http.StatusBadRequest)
+		return
+	}
+
+	// Insert delivery with admin as "creator"
+	var d model.Delivery
+	err = db.DB.QueryRow(
+		`INSERT INTO deliveries (supplier_username, product_name, quantity, proposed_price, status, notes)
+		 VALUES ($1,$2,$3,$4,'pending', 'Zamówione przez ' || $5)
+		 RETURNING delivery_id, status, created_at, updated_at`,
+		req.SupplierUsername, req.ProductName, req.Quantity, req.ProposedPrice, claims.Username,
+	).Scan(&d.DeliveryID, &d.Status, &d.CreatedAt, &d.UpdatedAt)
+	if err != nil {
+		http.Error(w, "insert failed", http.StatusInternalServerError)
+		return
+	}
+
+	d.SupplierUsername = req.SupplierUsername
+	d.ProductName = req.ProductName
+	d.Quantity = req.Quantity
+	d.ProposedPrice = req.ProposedPrice
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(d)
 }

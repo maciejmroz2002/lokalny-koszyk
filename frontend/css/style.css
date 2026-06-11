@@ -251,10 +251,12 @@ a { color: inherit; text-decoration: none; }
 .status-pending   { background: #fef3c7; color: #92400e; }
 .status-accepted  { background: var(--accent-light); color: var(--accent); }
 .status-rejected  { background: var(--danger-light); color: var(--danger); }
-.status-completed { background: #e0edff; color: #1d4ed8; }
+.status-ready_for_pickup { background: #fbbf24; color: #78350f; }
+.status-completed { background: #d1fae5; color: #065f46; }
 .status-confirmed { background: var(--accent-light); color: var(--accent); }
 .status-shipped   { background: #e0edff; color: #1d4ed8; }
 .status-delivered { background: #d1fae5; color: #065f46; }
+.status-returned_to_supplier { background: #fca5a5; color: #7c2d12; }
 .status-cancelled { background: var(--danger-light); color: var(--danger); }
 
 /* ==============================
