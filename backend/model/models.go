@@ -27,8 +27,8 @@ type RegisterReq struct {
 type InventoryItem struct {
 	ProductID       int64   `json:"product_id,omitempty"`
 	ProductName     string  `json:"product_name"`
-	ProductLocation string  `json:"product_location"`
-	ProductPrice    float64 `json:"product_price"`
+	ProductLocation string  `json:"product_location,omitempty"`
+	ProductPrice    float64 `json:"product_price,omitempty"`
 	ProductCount    int     `json:"product_count,omitempty"`
 	Category        string  `json:"category,omitempty"`
 }

@@ -1,23 +1,27 @@
 # Lokalny Koszyk 🧺
 
-Webowy system do zarządzania hurtownią produktów regionalnych. Automatyzuje procesy magazynowe, zarządzanie dostawcami i wysyła alerty o niskich stanach towarowych.
+Nowoczesny webowy system do zarządzania hurtownią produktów regionalnych. Platform automatyzuje procesy magazynowe, zarządzanie dostawcami, obsługę zamówień klientów i zapewnia bezpieczne zarządzanie rolami dostępu.
 
 ## Technologia
 
-- **Backend:** Go (REST API, JWT Authentication)
-- **Frontend:** HTML, CSS, JavaScript
-- **Baza danych:** PostgreSQL
+- **Backend:** Go 1.21 (REST API, JWT Authentication)
+- **Frontend:** HTML5, CSS3, Vanilla JavaScript
+- **Baza danych:** PostgreSQL Alpine
 - **Konteneryzacja:** Docker, Docker Compose
 - **Serwer:** Nginx (reverse proxy)
 
 ## Główne Funkcje
 
-- 🔐 Autentykacja JWT z rolami użytkowników (admin, magazynier)
-- 📦 Monitorowanie stanów magazynowych w czasie rzeczywistym
-- 🛍️ Publiczny katalog produktów
-- 📋 Zarządzanie produktami i zapasami (dla uprawnień użytkowników)
-- 👥 Obsługa wielu ról użytkowników
-- 📊 Panel administratora z dashboardem
+- 🔐 **Autentykacja JWT** - Bezpieczne logowanie z tokenami
+- 🛒 **Publiczny Katalog** - Niezalogowani użytkownicy mogą przeglądać dostępne produkty
+- 📦 **Zarządzanie Zapasami** - Dodawanie, edytowanie, usuwanie produktów (admin/magazynier)
+- 📍 **Lokalizacja Produktów** - Produkty przechowywane w konkretnych lokalizacjach magazynowych
+- 🛍️ **Koszyk Zakupowy** - Klienci mogą składać zamówienia
+- 📋 **Zarządzanie Zamówieniami** - Workflow: pending → confirmed → shipped → delivered
+- 🚚 **Dostawy od Dostawców** - Admin/Magazynier mogą zamawiać od dostawców bezpośrednio
+- 👥 **Role-Based Access Control** - Admin, Magazynier, Dostawca, Klient
+- 🎯 **Deferred Inventory** - Produkty usuwane z magazynu dopiero po wysłaniu zamówienia
+- 📊 **Dashboard** - Panel zarządzania dla każdej roli
 
 ## Struktura Projektu
 
@@ -83,16 +87,40 @@ python -m http.server 8000
 ## API Endpoints
 
 ### Publiczne
-- `GET /api/catalogue` - Lista produktów
+- `GET /api/catalogue` - Lista produktów dostępnych (bez cen, bez lokalizacji)
 - `GET /api/catalogue/{id}` - Szczegóły produktu
 - `POST /api/login` - Logowanie (zwraca JWT token)
+- `POST /api/register` - Rejestracja nowego użytkownika
 
 ### Chronione (wymagają JWT)
-- `GET /api/inventory` - Lista zapasów (admin, magazynier)
-- `POST /api/inventory` - Dodaj produkt (admin, magazynier)
-- `GET /api/inventory/{id}` - Szczegóły zapasu (admin, magazynier)
-- `PUT /api/inventory/{id}` - Aktualizuj produkt (admin, magazynier)
-- `DELETE /api/inventory/{id}` - Usuń produkt (admin, magazynier)
+
+**Zarządzanie Zapasami (admin, magazynier)**
+- `GET /api/inventory` - Lista wszystkich zapasów
+- `POST /api/inventory` - Dodaj produkt
+- `GET /api/inventory/{id}` - Szczegóły zapasu
+- `PUT /api/inventory/{id}` - Aktualizuj produkt
+- `DELETE /api/inventory/{id}` - Usuń produkt
+- `POST /api/inventory/move` - Przesuń produkt między lokalizacjami
+
+**Zamówienia Klientów (wszyscy zalogowani)**
+- `POST /api/orders` - Utwórz zamówienie
+- `GET /api/orders` - Lista zamówień (klient widzi swoje, admin widzi wszystkie)
+- `GET /api/orders/{id}` - Szczegóły zamówienia
+- `PATCH /api/orders/{id}/status` - Zmień status: pending → confirmed → shipped → delivered
+
+**Dostawy (admin, magazynier, dostawca)**
+- `POST /api/deliveries` - Prześlij dostawę (dostawca)
+- `GET /api/deliveries` - Lista dostaw
+- `PATCH /api/deliveries/{id}/status` - Zmień status dostawy
+- `POST /api/deliveries/supplier-order` - Zamów od dostawcy (admin, magazynier)
+
+**Lokalizacje (wszyscy zalogowani)**
+- `GET /api/locations` - Lista lokalizacji
+- `POST /api/locations` - Dodaj lokalizację (admin, magazynier)
+- `DELETE /api/locations/{id}` - Usuń lokalizację (admin, magazynier)
+
+**Dostawcy (wszyscy zalogowani)**
+- `GET /api/users/suppliers` - Lista wszystkich dostawców
 
 ## Dokumentacja
 

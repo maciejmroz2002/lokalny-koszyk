@@ -101,7 +101,49 @@ document.addEventListener('DOMContentLoaded', function() {
         breadcrumb.innerHTML = `<a onclick="location.reload()">Home</a> / <strong>${formatPageName(page)}</strong>`;
 
         if (page === 'OProjekcie') {
-            pageContent.innerHTML = '<p><em>Tu będzie opis czym jest Lokalny Koszyk</em></p>';
+            pageContent.innerHTML = `
+                <div class="about-content">
+                    <h2>O Projekcie Lokalny Koszyk</h2>
+                    <p>Lokalny Koszyk to nowoczesny system zarządzania hurtownią produktów regionalnych. Platform umożliwia efektywne zarządzanie zapasami, obsługę dostaw od dostawców oraz obsługę zamówień klientów.</p>
+                    
+                    <h3>Główne Funkcje</h3>
+                    <ul>
+                        <li><strong>Publiczny Katalog</strong> - Niezalogowani użytkownicy mogą przeglądać dostępne produkty</li>
+                        <li><strong>Role-Based Access</strong> - Admin, Magazynier, Dostawca, Klient</li>
+                        <li><strong>Zarządzanie Zapasami</strong> - Dodawanie, edytowanie, usuwanie produktów</li>
+                        <li><strong>Koszyk Zakupowy</strong> - Klienci mogą składać zamówienia</li>
+                        <li><strong>Zarządzanie Zamówieniami</strong> - Śledzenie statusu: pending → confirmed → shipped → delivered</li>
+                        <li><strong>Dostawy od Dostawców</strong> - Admin/Magazynier mogą zamawiać od dostawców</li>
+                        <li><strong>Lokalizacja Produktów</strong> - Produkty przechowywane w konkretnych lokalizacjach</li>
+                        <li><strong>Autentykacja JWT</strong> - Bezpieczne logowanie z tokenami</li>
+                        <li><strong>Deferred Inventory</strong> - Produkty usuwane z magazynu dopiero po wysłaniu</li>
+                    </ul>
+                    
+                    <h3>Role i Uprawnienia</h3>
+                    <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+                        <tr style="background-color: #f5f5f5; border-bottom: 2px solid #ddd;">
+                            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Rola</strong></td>
+                            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Uprawnienia</strong></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Admin</strong></td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">Pełny dostęp do systemu, zarządzanie użytkownikami, produktami, zamówieniami</td>
+                        </tr>
+                        <tr style="background-color: #f9f9f9;">
+                            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Magazynier</strong></td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">Zarządzanie zapasami, obsługa dostaw, lokalizacje</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Dostawca</strong></td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">Przesyłanie dostaw, śledzenie statusu swoich dostaw</td>
+                        </tr>
+                        <tr style="background-color: #f9f9f9;">
+                            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Klient</strong></td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">Przeglądanie katalogu, składanie zamówień</td>
+                        </tr>
+                    </table>
+                </div>
+            `;
         } else if (page === 'Instrukcja') {
             pageContent.innerHTML = `
                 <div class="instruction-content">

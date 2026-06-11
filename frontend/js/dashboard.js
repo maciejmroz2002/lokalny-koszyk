@@ -119,7 +119,10 @@ function renderCatalogueGrid() {
   grid.innerHTML = catalogueProducts.map(p => `
     <div class="product-card">
       <h3>${esc(p.product_name)}</h3>
-      <div class="product-meta"><span><i data-lucide="map-pin" style="width:1em;height:1em;vertical-align:middle;"></i> ${esc(p.product_location)}</span><span>${esc(p.category || '')}</span></div>
+      <div class="product-meta">
+        ${(currentUser?.role === 'admin' || currentUser?.role === 'magazynier') ? `<span><i data-lucide="map-pin" style="width:1em;height:1em;vertical-align:middle;"></i> ${esc(p.product_location)}</span>` : ''}
+        <span>${esc(p.category || '')}</span>
+      </div>
       <div class="product-price">${Number(p.product_price).toFixed(2)} zł</div>
       ${currentUser?.role === 'client' ? `<button class="btn btn-primary btn-sm" onclick="addProductToCart(${p.product_id}, '${esc(p.product_name).replace(/'/g, "\\'")}', ${p.product_price})" style="margin-top:0.75rem;width:100%;"><i data-lucide="shopping-cart" style="width:1em;height:1em;vertical-align:middle;margin-right:0.25rem;"></i> Dodaj do zamówienia</button>` : ''}
     </div>

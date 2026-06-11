@@ -24,8 +24,7 @@
 
   <div class="catalogue-page">
     <h1>Katalog produktów</h1>
-    <div id="catalogueFilters" style="margin-bottom:1.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;"></div>
-    <div id="productsByCategory"></div>
+    <div id="productsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:1.5rem;padding:2rem;"></div>
   </div>
 
   <!-- Modal detail -->
@@ -52,33 +51,45 @@
       ? `<a href="dashboard.html" class="navbar-link btn-login">Panel</a>`
       : `<a href="login.html" class="navbar-link btn-login">Zaloguj się</a>`;
 
-    // HTMX: transform JSON array into product cards
-    document.body.addEventListener('htmx:afterRequest', (e) => {
-      if (e.detail.elt.id !== 'productsGrid') return;
-      if (!e.detail.successful) {
-        document.getElementById('productsGrid').innerHTML = '<p style="color:var(--danger);padding:2rem;">Nie udało się wczytać katalogu.</p>';
-        return;
-      }
+    // Load and render catalogue
+    async function loadCatalogue() {
       try {
-        const products = JSON.parse(e.detail.xhr.responseText) || [];
+        const headers = {};
+        const token = localStorage.getItem('jwtToken');
+        if (token) {
+          headers['Authorization'] = 'Bearer ' + token;
+        }
+        
+        const res = await fetch('/api/catalogue', { headers });
+        if (!res.ok) throw new Error('API error');
+        
+        const products = await res.json();
         const grid = document.getElementById('productsGrid');
-        if (!products.length) { grid.innerHTML = '<p style="color:var(--text-muted);padding:2rem;">Brak produktów w katalogu.</p>'; return; }
+        
+        if (!products || !products.length) {
+          grid.innerHTML = '<p style="color:var(--text-muted);padding:2rem;">Brak produktów w katalogu.</p>';
+          return;
+        }
+        
         grid.innerHTML = products.map(p => `
-          <div class="product-card" onclick="openDetail(${p.product_id},'${esc(p.product_name)}','${esc(p.product_location)}',${p.product_price})">
-            <h3>${esc(p.product_name)}</h3>
-            <div class="product-meta">
-              <span><i data-lucide=\"map-pin\" style=\"width:1em;height:1em;vertical-align:middle;\"></i> ${esc(p.product_location)}</span>
-            </div>
-            <div class="product-price">${p.product_price.toFixed(2)} zł</div>
+          <div class="product-card" onclick="openDetail(${p.product_id},'${esc(p.product_name)}','${esc(p.product_location || '')}',${p.product_price || 0})" style="border:1px solid #ddd;border-radius:8px;padding:1.5rem;cursor:pointer;">
+            <h3 style="margin:0 0 0.5rem;font-size:1.1rem;">${esc(p.product_name)}</h3>
+            ${p.product_location ? `<div class="product-meta" style="color:#666;font-size:0.9rem;margin-bottom:0.5rem;"><i data-lucide="map-pin" style="width:1em;height:1em;vertical-align:middle;"></i> ${esc(p.product_location)}</div>` : ''}
+            ${p.product_price ? `<div class="product-price" style="font-weight:bold;margin-top:0.5rem;color:#27ae60;">${p.product_price.toFixed(2)} zł</div>` : '<div style="color:#999;font-size:0.9rem;">Cena: dostępna dla zalogowanych</div>'}
+            <p style="margin:0.5rem 0 0;font-size:0.85rem;color:#666;">${p.category || 'Bez kategorii'}</p>
           </div>
         `).join('');
-      } catch { /* handled above */ }
-    });
+        lucide.createIcons();
+      } catch (e) {
+        console.error('Failed to load catalogue:', e);
+        document.getElementById('productsGrid').innerHTML = '<p style="color:var(--danger);padding:2rem;">Nie udało się wczytać katalogu.</p>';
+      }
+    }
 
     function openDetail(id, name, loc, price) {
       document.getElementById('detailName').textContent = name;
-      document.getElementById('detailLoc').textContent = loc;
-      document.getElementById('detailPrice').textContent = price.toFixed(2) + ' zł';
+      document.getElementById('detailLoc').textContent = loc || 'Brak informacji';
+      document.getElementById('detailPrice').textContent = price > 0 ? price.toFixed(2) + ' zł' : 'Zaloguj się, aby zobaczyć cenę';
       document.getElementById('detailOverlay').classList.add('open');
     }
     function closeDetail() {
@@ -90,7 +101,9 @@
     function esc(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
     }
-    // Initialize Lucide Icons
-    lucide.createIcons();  </script>
+    
+    // Load on page load
+    loadCatalogue();
+  </script>
 </body>
 </html>

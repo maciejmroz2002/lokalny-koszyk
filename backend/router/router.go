@@ -33,8 +33,8 @@ func Register() {
 	mux.Handle("/api/register", cors(http.HandlerFunc(handler.Register)))
 	mux.Handle("/api/users/suppliers", cors(allAuthRoles(http.HandlerFunc(handler.GetSuppliers))))
 
-	// Catalogue (authenticated users, filtered by role)
-	mux.Handle("/api/catalogue", cors(allAuthRoles(http.HandlerFunc(handler.GetCatalogue))))
+	// Catalogue (public with optional auth - shows different data based on role)
+	mux.Handle("/api/catalogue", cors(http.HandlerFunc(handler.GetCatalogue)))
 	mux.Handle("/api/catalogue/", cors(allAuthRoles(http.HandlerFunc(handler.GetCatalogueItem))))
 
 	// Inventory (admin & magazynier)
